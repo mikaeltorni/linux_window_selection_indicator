@@ -1,0 +1,7 @@
+{
+  "uuid": "window-selection-indicator@local",
+  "name": "Window Selection Indicator",
+  "description": "A translucent focus outline for every application window",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "version": 1
+}
