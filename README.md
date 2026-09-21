@@ -1,6 +1,21 @@
 # Linux Window Selection Indicator
 
-A small desktop component for showing which window has keyboard focus. Implementation and installation instructions will follow in subsequent commits.
+A small GNOME Shell extension that draws a white, translucent outline around
+the focused application window. It follows focus, moves, resizes, and workspace
+changes on every normal window, including terminals, browsers, and editors.
+The extension does not inspect agent processes, statuses, or terminal classes.
+
+## Install
+
+Run `bash install.sh` from this checkout. The installer copies the extension to
+the desktop user's `~/.local/share/gnome-shell/extensions` and enables it.
+On X11, new extension code requires GNOME Shell's in-place Alt+F2 `r` reload;
+on Wayland, sign out and back in after installation. No extra Python packages
+or root access are required.
+
+Agent Command Center can install this component from a sibling checkout. It
+continues to decide agent lifecycle colors and renders those in its own Kitty
+outlines; this repository owns only the focused-window indication.
 
 ## Disclaimer
 
