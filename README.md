@@ -17,6 +17,12 @@ Agent Command Center can install this component from a sibling checkout. It
 continues to decide agent lifecycle colors and renders those in its own Kitty
 outlines; this repository owns only the focused-window indication.
 
+The indicator reads GNOME Shell's focused window directly. It does not read or
+publish Phrase Automation notes, ACC status snapshots, prompts, or agent state,
+so the white selector never appears as content in the Phrase Automation note
+display. When an ACC terminal is focused, its ACC status outline and this focus
+indicator are independent layers.
+
 ## Disclaimer
 
 This software is provided under the MIT License on an **“as is”** basis, without warranties of any kind. To the maximum extent permitted by applicable law, the authors and copyright holders shall not be liable for any claims, damages, losses, or other liability arising from the use of this software.
