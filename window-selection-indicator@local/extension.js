@@ -19,7 +19,9 @@ export default class WindowSelectionIndicator extends Extension {
             visible: false,
             style: `border: ${BORDER_PX}px solid ${BORDER_COLOR}; border-radius: 7px;`,
         });
-        Main.uiGroup.add_child(this._outline);
+        // Keep the indicator in the compositor's window stack. Shell chrome
+        // and always-on-top application popups must remain above it.
+        global.window_group.add_child(this._outline);
         this._focusWindow = null;
         this._windowSignals = [];
         this._displaySignal = global.display.connect('notify::focus-window',
@@ -80,7 +82,8 @@ export default class WindowSelectionIndicator extends Extension {
         }
         this._outline.set_position(frame.x, frame.y);
         this._outline.set_size(frame.width, frame.height);
-        Main.uiGroup.set_child_above_sibling(this._outline, null);
+        const windowActor = window.get_compositor_private();
+        global.window_group.set_child_above_sibling(this._outline, windowActor);
         this._outline.show();
     }
 

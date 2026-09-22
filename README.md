@@ -23,6 +23,10 @@ so the white selector never appears as content in the Phrase Automation note
 display. When an ACC terminal is focused, its ACC status outline and this focus
 indicator are independent layers.
 
+The indicator is stacked immediately above the focused window in GNOME's
+window group. Always on top application popups, including Phrase Automation's
+notes overlay, and GNOME Shell chrome remain above it.
+
 ## Disclaimer
 
 This software is provided under the MIT License on an **“as is”** basis, without warranties of any kind. To the maximum extent permitted by applicable law, the authors and copyright holders shall not be liable for any claims, damages, losses, or other liability arising from the use of this software.
