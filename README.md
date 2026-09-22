@@ -1,8 +1,9 @@
 # Linux Window Selection Indicator
 
-A small GNOME Shell extension that draws a white, translucent outline around
-the focused application window. It follows focus, moves, resizes, and workspace
-changes on every normal window, including terminals, browsers, and editors.
+A small GNOME Shell extension that draws a 2.67px teal outline at 60% opacity
+around the focused application window. It follows focus, moves, resizes, and
+workspace changes on every normal window, including terminals, browsers, and
+editors.
 The extension does not inspect agent processes, statuses, or terminal classes.
 
 ## Install
@@ -19,9 +20,9 @@ outlines; this repository owns only the focused-window indication.
 
 The indicator reads GNOME Shell's focused window directly. It does not read or
 publish Phrase Automation notes, ACC status snapshots, prompts, or agent state,
-so the white selector never appears as content in the Phrase Automation note
-display. When an ACC terminal is focused, its ACC status outline and this focus
-indicator are independent layers.
+so the teal focus indicator never appears as content in the Phrase Automation
+note display. When an ACC terminal is focused, its ACC status outline and this
+focus indicator are independent layers.
 
 The indicator is stacked immediately above the focused window in GNOME's
 window group. Always on top application popups, including Phrase Automation's
