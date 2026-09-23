@@ -4,7 +4,7 @@ import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const BORDER_PX = 4;
-const BORDER_COLOR = 'rgba(0, 128, 128, 0.6)';
+const BORDER_COLOR = 'rgba(0, 200, 180, 0.6)';
 
 /** Return true for a visible application window eligible for the indicator. */
 function isApplicationWindow(window) {
