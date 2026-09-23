@@ -1,6 +1,6 @@
 # Linux Window Selection Indicator
 
-A small GNOME Shell extension that draws a 2.67px teal outline at 60% opacity
+A small GNOME Shell extension that draws a 4px teal outline at 60% opacity
 around the focused application window. It follows focus, moves, resizes, and
 workspace changes on every normal window, including terminals, browsers, and
 editors.
