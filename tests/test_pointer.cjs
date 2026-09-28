@@ -30,6 +30,7 @@ const shell = {
     workspace_manager: { ...signals, get_active_workspace: () => activeWorkspace },
     window_group: { add_child() {}, set_child_above_sibling() {} },
     get_pointer: () => pointer,
+    stage: { width: 300, height: 400 },
 };
 const main = { overview: { ...signals, visible: false }, uiGroup: { add_child() {} } };
 const context = vm.createContext({
@@ -49,6 +50,10 @@ for (const [x, y, expected] of [[400, 200, 100], [1000, 200, 100],
 }
 assert.equal(context.pointerVector(frame, 1000, 200, 95).length, 95);
 assert.equal(context.pointerVector(frame, 320, 200, 95).length, 20);
+// Regression: shorten over the entire desktop, not just the last 100 pixels.
+assert.equal(context.pointerVector(frame, 500, 200, 100, 500).length, 40);
+assert.equal(context.pointerVector(frame, 400, 200, 100, 500).length, 20);
+assert.equal(context.pointerVector(frame, 350, 200, 100, 500).length, 10);
 const source = fs.readFileSync(path.join(root, 'window-selection-indicator@local/extension.js'), 'utf8')
     .replace(/^import .*;$/gm, '')
     .replace('export default class', 'globalThis.Indicator = class');
@@ -83,7 +88,7 @@ assert.equal(extension._pointer.visible, false);
 pointerEnabled = true; settingsCallback();
 assert.equal(extension._pointer.visible, true, 'live opt-in');
 pointerMaxLength = 95; settingsCallback();
-assert.equal(extension._vector.length, 95, 'length changes live');
+assert.equal(extension._vector.length, 19, 'length changes live with desktop distance');
 extension.disable();
 assert.equal(timer, null, 'timer removed on disable');
 assert.ok(actors.every(actor => actor.destroyed));
