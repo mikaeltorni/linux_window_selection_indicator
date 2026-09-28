@@ -11,7 +11,8 @@ const actors = [];
 class Actor {
     constructor(props) { Object.assign(this, props); actors.push(this); }
     connect(name, callback) { this[name] = callback; return 1; }
-    set_position(x, y) { this.x = x; this.y = y; }
+    set_position(x, y) { this.x = x; this.y = y; this.positions = (this.positions || 0) + 1; }
+    set_translation(x, y, z) { this.translation_x = x; this.translation_y = y; this.translation_z = z; }
     set_size(width, height) { this.width = width; this.height = height; this.resizes = (this.resizes || 0) + 1; }
     set_pivot_point(x, y) { this.pivot = [x, y]; }
     set_scale(x, y) { this.scale_x = x; this.scale_y = y; }
@@ -112,10 +113,11 @@ assert.equal(pollInterval, 4, '250Hz cursor sampling');
 assert.equal(pollPriority, -100, 'sample ahead of ordinary GLib tasks');
 pointer = [700, 200]; beforePaint();
 assert.equal(extension._vector.x, 700, 'sample the latest cursor immediately before rendering');
-assert.equal(extension._pointer.x + 2, 700, 'texture pivot stays on cursor hotspot');
+assert.equal(extension._pointer.translation_x + 2, 700, 'texture pivot stays on cursor hotspot');
 assert.equal(extension._pointer.rotation_angle_z, 180);
 assert.equal(extension._pointer.scale_x, 0.5);
 const readsBeforeMotion = frameReads, normalizationsBeforeMotion = normalizationCalls;
+const positionsBeforeMotion = extension._pointer.positions;
 const repaintsBeforeMotion = extension._pointer.repaints, resizesBeforeMotion = extension._pointer.resizes;
 for (let x = 699; x >= 650; x--) { pointer = [x, 200]; timer(); beforePaint(); }
 for (let count = 0; count < 1000; count++) timer();
@@ -123,6 +125,7 @@ assert.equal(frameReads, readsBeforeMotion, 'cursor tracking reuses window geome
 assert.equal(normalizationCalls, normalizationsBeforeMotion, 'cursor tracking reuses monitor normalization');
 assert.equal(extension._pointer.repaints, repaintsBeforeMotion, 'moving cursor uses GPU transforms without Cairo repaint');
 assert.equal(extension._pointer.resizes, resizesBeforeMotion, 'moving cursor does not reallocate its drawing surface');
+assert.equal(extension._pointer.positions, positionsBeforeMotion, 'moving cursor does not relayout the actor');
 pointer = [150, 150]; timer();
 assert.equal(extension._pointer.visible, false, 'inside the window');
 pointer = [400, 200]; timer();
