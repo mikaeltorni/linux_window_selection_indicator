@@ -36,10 +36,10 @@ export default class WindowSelectionIndicator extends Extension {
         this._pointer = new St.DrawingArea({ reactive: false, visible: false });
         this._pointer.connect('repaint', () => this._paintPointer());
         Main.uiGroup.add_child(this._pointer);
-        this._pointerTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 16, () => {
-            this._updatePointer();
-            return GLib.SOURCE_CONTINUE;
-        });
+        this._pointerTimer = 0;
+        this._settings = this.getSettings();
+        this._settingsSignal = this._settings.connect('changed', () => this._syncPointerSettings());
+        this._syncPointerSettings();
         this._syncFocus();
         wsiLog('info', 'enabled with cursor vector');
     }
@@ -99,10 +99,27 @@ export default class WindowSelectionIndicator extends Extension {
         this._updatePointer();
     }
 
+    /** Start polling only while the optional pointer setting is enabled. */
+    _syncPointerSettings() {
+        this._pointerEnabled = this._settings.get_boolean('pointer-enabled');
+        if (this._pointerTimer) {
+            GLib.Source.remove(this._pointerTimer);
+            this._pointerTimer = 0;
+        }
+        if (this._pointerEnabled) {
+            this._pointerTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 16, () => {
+                this._updatePointer();
+                return GLib.SOURCE_CONTINUE;
+            });
+        }
+        this._updatePointer();
+        wsiLog('info', `cursor vector ${this._pointerEnabled ? 'enabled' : 'disabled'}`);
+    }
+
     /** Track the pointer only for a visible focused window on this workspace. */
     _updatePointer() {
         const window = this._focusWindow;
-        if (!isApplicationWindow(window) || Main.overview.visible ||
+        if (!this._pointerEnabled || !isApplicationWindow(window) || Main.overview.visible ||
             !window.located_on_workspace(global.workspace_manager.get_active_workspace())) {
             this._pointer.hide();
             return;
@@ -150,9 +167,12 @@ export default class WindowSelectionIndicator extends Extension {
     }
 
     disable() {
-        GLib.Source.remove(this._pointerTimer);
+        this._settings.disconnect(this._settingsSignal);
+        if (this._pointerTimer)
+            GLib.Source.remove(this._pointerTimer);
         this._pointerTimer = 0;
         this._pointer.destroy();
+        this._settings = null;
         this._disconnectWindow();
         global.display.disconnect(this._displaySignal);
         global.workspace_manager.disconnect(this._workspaceSignal);

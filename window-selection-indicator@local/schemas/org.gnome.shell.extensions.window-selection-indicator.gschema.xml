@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.window-selection-indicator" path="/org/gnome/shell/extensions/window-selection-indicator/">
+    <key name="pointer-enabled" type="b">
+      <default>false</default>
+      <summary>Show the optional cursor vector toward the focused window</summary>
+    </key>
+  </schema>
+</schemalist>

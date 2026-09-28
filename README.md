@@ -6,14 +6,20 @@ workspace changes on every normal window, including terminals, browsers, and
 editors.
 The extension does not inspect agent processes, statuses, or terminal classes.
 
-The extension also draws a thin teal line from the cursor hotspot toward the
+The optional `ptr` component draws a thin teal line from the cursor hotspot toward the
 nearest edge of the focused window, only on the active workspace. It disappears
 when the cursor enters the window, focus is absent, or the overview is open.
 The line never intercepts clicks.
 
 ## Install
 
-Run `bash install.sh` from this checkout. The installer copies the extension to
+Run `bash install.sh` from this checkout for the component menu (or defaults
+without a terminal). The outline is default-on; the cursor vector is default-off.
+Use `bash install.sh --select outline,ptr` to install both. Use
+`bash install.sh --uninstall ptr` to disable only the vector. `--default`, `--all`,
+`--list-components`, `--detect`, and `--reconfigure ptr` use the shared framework.
+
+The installer copies the extension to
 the desktop user's `~/.local/share/gnome-shell/extensions` and enables it.
 On X11, new extension code requires GNOME Shell's in-place Alt+F2 `r` reload;
 on Wayland, sign out and back in after installation. No extra Python packages
