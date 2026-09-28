@@ -7,6 +7,7 @@ const root = path.resolve(__dirname, '..');
 let pointerEnabled = true, pointerMaxLength = 100, settingsCallback;
 const settings = { get_boolean: () => pointerEnabled, get_int: () => pointerMaxLength, connect(_name, callback) { settingsCallback = callback; return 1; }, disconnect() {} };
 let pointer = [20, 50], activeWorkspace = {}, timer, beforePaint, pollInterval, pollPriority, frameReads = 0;
+let sampleTime = 1000000;
 const actors = [];
 class Actor {
     constructor(props) { Object.assign(this, props); actors.push(this); }
@@ -32,6 +33,14 @@ const shell = {
     display: { ...signals, focus_window: window },
     workspace_manager: { ...signals, get_active_workspace: () => activeWorkspace },
     window_group: { add_child() {}, set_child_above_sibling() {} },
+    stage: {
+        connect(name, callback) {
+            assert.equal(name, 'before-paint');
+            beforePaint = () => callback(this, { get_refresh_rate: () => 120 });
+            return 43;
+        },
+        disconnect(id) { assert.equal(id, 43); beforePaint = null; },
+    },
     get_pointer: () => pointer,
 };
 const main = { overview: { ...signals, visible: false }, uiGroup: { add_child() {} },
@@ -39,16 +48,40 @@ const main = { overview: { ...signals, visible: false }, uiGroup: { add_child() 
 const context = vm.createContext({
     St: { Widget: Actor, DrawingArea: Actor }, Extension: class { getSettings() { return settings; } },
     Main: main, global: shell, wsiLog() {},
-    Clutter: { RepaintFlags: { PRE_PAINT: 1 },
-        threads_add_repaint_func_full(flags, callback) {
-            assert.equal(flags, 1); beforePaint = callback; return 43;
-        },
-        threads_remove_repaint_func(id) { assert.equal(id, 43); beforePaint = null; } },
     GLib: { PRIORITY_DEFAULT: 0, PRIORITY_HIGH: -100, SOURCE_CONTINUE: true,
-        timeout_add(priority, interval, callback) { pollPriority = priority; pollInterval = interval; timer = callback; return 42; },
+        get_monotonic_time: () => sampleTime,
+        timeout_add(priority, interval, callback) { pollPriority = priority; pollInterval = interval; timer = () => { sampleTime += interval * 1000; return callback(); }; return 42; },
         Source: { remove(id) { assert.equal(id, 42); timer = null; } } },
 });
-vm.runInContext(fs.readFileSync(path.join(root, 'window-selection-indicator@local/geometry.js'), 'utf8').replaceAll('export function', 'function'), context);
+vm.runInContext(fs.readFileSync(path.join(root, 'window-selection-indicator@local/geometry.js'), 'utf8').replace(/^export /gm, ''), context);
+// Model the hardware cursor advancing while the compositor's frame is queued.
+// Compensate steady motion; never extrapolate a warp, stop, reversal or gap.
+const motion = vm.runInContext('new PointerMotion()', context);
+const monitor = { x: 0, y: 0, width: 2000, height: 1000 };
+motion.sample(500, 200, 1000000);
+motion.sample(508, 200, 1004000);
+motion.sample(516, 200, 1008000);
+assert.deepEqual(Array.from(motion.project(1008000, 8000, monitor)), [532, 200],
+    '16px of render latency is compensated at 2000px/s');
+motion.sample(516, 200, 1020000);
+assert.deepEqual(Array.from(motion.project(1020000, 8000, monitor)), [516, 200], 'stop snaps to actual cursor');
+assert.equal(motion.steady, false, 'pause discards old velocity');
+motion.sample(510, 200, 1024000);
+assert.deepEqual(Array.from(motion.project(1024000, 8000, monitor)), [510, 200], 'reversal does not overshoot');
+motion.sample(900, 200, 1028000);
+assert.deepEqual(Array.from(motion.project(1028000, 8000, monitor)), [900, 200], 'pointer warp is not projected');
+motion.sample(910, 200, 1032000);
+motion.sample(920, 200, 1036000);
+assert.deepEqual(Array.from(motion.project(1100000, 8000, monitor)), [920, 200], 'stale movement expires');
+assert.deepEqual(Array.from(motion.project(1036000, 1000000, monitor)), [960, 200], 'lead is bounded to 16ms');
+assert.deepEqual(Array.from(motion.project(1036000, 8000, { x: 0, y: 0, width: 930, height: 1000 })), [929, 200],
+    'projection stays on actual monitor pixels');
+motion.sample(1080, 200, 1040000);
+motion.sample(1240, 200, 1044000);
+assert.deepEqual(Array.from(motion.project(1044000, 16000, monitor)), [1304, 200], 'fast motion lead is capped at 64px');
+motion.reset();
+motion.sample(400, 200, 2000000);
+assert.deepEqual(Array.from(motion.project(2000000, 8000, monitor)), [400, 200], 'focus changes discard old velocity');
 const frame = { x: 100, y: 100, width: 200, height: 200 };
 for (const [x, y, expected] of [[400, 200, 100], [1000, 200, 100],
     [350, 200, 50], [150, 150, 0], [100, 100, 0], [-400, -400, 100]]) {
@@ -126,6 +159,21 @@ assert.equal(normalizationCalls, normalizationsBeforeMotion, 'cursor tracking re
 assert.equal(extension._pointer.repaints, repaintsBeforeMotion, 'moving cursor uses GPU transforms without Cairo repaint');
 assert.equal(extension._pointer.resizes, resizesBeforeMotion, 'moving cursor does not reallocate its drawing surface');
 assert.equal(extension._pointer.positions, positionsBeforeMotion, 'moving cursor does not relayout the actor');
+// Integration: compensate the display frame, then correct on pause and reversal.
+pointer = [600, 200]; timer();
+pointer = [592, 200]; timer();
+pointer = [584, 200]; timer(); beforePaint();
+assert.ok(Math.abs(extension._vector.x - (584 - 2000 / 120)) < 1e-8,
+    'late stage paint compensates one 120Hz frame');
+timer(); timer(); timer(); beforePaint();
+assert.equal(extension._vector.x, 584, 'stopped cursor returns to its exact position');
+pointer = [590, 200]; timer(); beforePaint();
+assert.equal(extension._vector.x, 590, 'reversal draws actual input without old velocity');
+pointer = [308, 200]; timer();
+pointer = [304, 200]; timer();
+pointer = [301, 200]; timer(); beforePaint();
+assert.equal(extension._pointer.visible, true, 'prediction does not hide before actual window entry');
+assert.equal(extension._vector.x, 301, 'approach keeps actual position if prediction would enter window');
 pointer = [150, 150]; timer();
 assert.equal(extension._pointer.visible, false, 'inside the window');
 pointer = [400, 200]; timer();
