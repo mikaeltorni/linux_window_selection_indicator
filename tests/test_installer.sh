@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run installation in an isolated home with an in-memory settings backend.
+# Run installation in an isolated home with a persistent keyfile settings backend.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 sandbox="$(mktemp -d "$root/.test-install.XXXXXX")"
