@@ -25,7 +25,9 @@ run_as_target() {
 
 target_dir="$target_home/.local/share/gnome-shell/extensions/$uuid"
 wsi_log INFO "installing extension into $target_dir"
-run_as_target install -D -m 0644 "$source_dir/$uuid/extension.js" "$target_dir/extension.js"
+for file in extension.js geometry.js logging.js; do
+    run_as_target install -D -m 0644 "$source_dir/$uuid/$file" "$target_dir/$file"
+done
 run_as_target install -D -m 0644 "$source_dir/$uuid/metadata.json" "$target_dir/metadata.json"
 # The running Shell may not discover a newly copied extension until its next
 # X11 in-place reload or Wayland login. Persist the enablement now so that

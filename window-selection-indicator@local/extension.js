@@ -1,5 +1,8 @@
 /** Draw a focus outline for normal windows, independent of application state. */
 import St from 'gi://St';
+import GLib from 'gi://GLib';
+import { pointerVector } from './geometry.js';
+import { wsiLog } from './logging.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
@@ -30,8 +33,15 @@ export default class WindowSelectionIndicator extends Extension {
             () => this._syncFocus());
         this._overviewShowing = Main.overview.connect('showing', () => this._hide());
         this._overviewHidden = Main.overview.connect('hidden', () => this._syncFocus());
+        this._pointer = new St.DrawingArea({ reactive: false, visible: false });
+        this._pointer.connect('repaint', () => this._paintPointer());
+        Main.uiGroup.add_child(this._pointer);
+        this._pointerTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 16, () => {
+            this._updatePointer();
+            return GLib.SOURCE_CONTINUE;
+        });
         this._syncFocus();
-        console.info('Window Selection Indicator enabled');
+        wsiLog('info', 'enabled with cursor vector');
     }
 
     /** Detach listeners from the previous focused window. */
@@ -46,6 +56,7 @@ export default class WindowSelectionIndicator extends Extension {
 
     _hide() {
         this._outline.hide();
+        this._pointer.hide();
     }
 
     /** Follow focus without examining window titles, classes, or agent states. */
@@ -55,13 +66,13 @@ export default class WindowSelectionIndicator extends Extension {
             this._disconnectWindow();
             if (isApplicationWindow(window)) {
                 this._focusWindow = window;
-                for (const name of ['position-changed', 'size-changed'])
+                for (const name of ['position-changed', 'size-changed', 'workspace-changed', 'notify::minimized'])
                     this._windowSignals.push(window.connect(name, () => this._place()));
                 this._windowSignals.push(window.connect('unmanaged', () => {
                     this._disconnectWindow();
                     this._hide();
                 }));
-                console.debug('Window Selection Indicator focus changed');
+                wsiLog('debug', 'focus changed');
             }
         }
         this._place();
@@ -85,9 +96,63 @@ export default class WindowSelectionIndicator extends Extension {
         const windowActor = window.get_compositor_private();
         global.window_group.set_child_above_sibling(this._outline, windowActor);
         this._outline.show();
+        this._updatePointer();
+    }
+
+    /** Track the pointer only for a visible focused window on this workspace. */
+    _updatePointer() {
+        const window = this._focusWindow;
+        if (!isApplicationWindow(window) || Main.overview.visible ||
+            !window.located_on_workspace(global.workspace_manager.get_active_workspace())) {
+            this._pointer.hide();
+            return;
+        }
+        const frame = window.get_frame_rect();
+        if (frame.width <= 0 || frame.height <= 0) {
+            this._pointer.hide();
+            return;
+        }
+        const [x, y] = global.get_pointer();
+        const vector = pointerVector(frame, x, y);
+        if (vector.length === 0) {
+            this._pointer.hide();
+            return;
+        }
+        const key = `${x},${y},${vector.dx},${vector.dy}`;
+        if (this._pointer.visible && key === this._pointerKey)
+            return;
+        this._pointerKey = key;
+        this._vector = vector;
+        const left = Math.floor(Math.min(x, x + vector.dx)) - 2;
+        const top = Math.floor(Math.min(y, y + vector.dy)) - 2;
+        this._pointer.set_position(left, top);
+        this._pointer.set_size(Math.ceil(Math.abs(vector.dx)) + 4,
+            Math.ceil(Math.abs(vector.dy)) + 4);
+        this._pointer.queue_repaint();
+        this._pointer.show();
+    }
+
+    /** Paint a thin teal line without a hitbox or per-frame journal output. */
+    _paintPointer() {
+        const cr = this._pointer.get_context();
+        try {
+            if (!this._vector)
+                return;
+            const { x, y, dx, dy } = this._vector;
+            cr.setSourceRGBA(0, 1, 230 / 255, 0.6);
+            cr.setLineWidth(2);
+            cr.moveTo(x - this._pointer.x, y - this._pointer.y);
+            cr.lineTo(x + dx - this._pointer.x, y + dy - this._pointer.y);
+            cr.stroke();
+        } finally {
+            cr.$dispose();
+        }
     }
 
     disable() {
+        GLib.Source.remove(this._pointerTimer);
+        this._pointerTimer = 0;
+        this._pointer.destroy();
         this._disconnectWindow();
         global.display.disconnect(this._displaySignal);
         global.workspace_manager.disconnect(this._workspaceSignal);
@@ -95,6 +160,6 @@ export default class WindowSelectionIndicator extends Extension {
         Main.overview.disconnect(this._overviewHidden);
         this._outline.destroy();
         this._outline = null;
-        console.info('Window Selection Indicator disabled');
+        wsiLog('info', 'disabled');
     }
 }
