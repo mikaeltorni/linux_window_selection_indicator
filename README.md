@@ -6,6 +6,11 @@ workspace changes on every normal window, including terminals, browsers, and
 editors.
 The extension does not inspect agent processes, statuses, or terminal classes.
 
+The extension also draws a thin teal line from the cursor hotspot toward the
+nearest edge of the focused window, only on the active workspace. It disappears
+when the cursor enters the window, focus is absent, or the overview is open.
+The line never intercepts clicks.
+
 ## Install
 
 Run `bash install.sh` from this checkout. The installer copies the extension to
