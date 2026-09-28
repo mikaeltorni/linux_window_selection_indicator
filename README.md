@@ -18,8 +18,15 @@ resolutions, and window moves/resizes are included automatically; empty gaps in
 staggered monitor layouts do not count. The line never intercepts clicks.
 
 The pointer polls every 4ms (250 samples per second) at high priority and samples
-again immediately before the compositor paints. Visible updates follow each
-monitor's refresh rate, including 120Hz displays. Window/monitor geometry is
+again at the stage's `before-paint` signal, after layout and frame preparation.
+While moving steadily, it projects the line origin by one refresh interval to
+compensate for the cursor advancing before the frame appears. This is bounded
+to 16ms and 64px, stays within actual monitor pixels, and drops old velocity on
+reversals, cursor warps, focus changes and pauses. Actual cursor position controls
+window entry, so the line disappears inside the window without waiting for
+prediction. A sudden stop can briefly show the projected origin until the next
+frame corrects it. Visible updates still depend on compositor/display timing;
+polling at 250Hz does not make the display render at 250Hz. Window/monitor geometry is
 cached until it changes; a reusable thin line texture moves, rotates and scales
 on the GPU without repainting or resizing its drawing surface on every motion.
 Stationary samples skip geometry and drawing updates, and disabling `ptr`
