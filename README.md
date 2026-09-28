@@ -10,9 +10,12 @@ The optional `ptr` component draws a thin teal line from the cursor hotspot
 toward the nearest edge of the focused window, only on the active workspace. It disappears
 when the cursor enters the window, focus is absent, or the overview is open.
 The line shortens proportionally as the cursor approaches the nearest window
-edge, using the desktop diagonal as its distance scale. The configured length
-(100px by default) is its maximum, rather than a near-window threshold.
-It never intercepts clicks.
+edge. Its length is the configured maximum (100px by default) multiplied by
+its current distance divided by the farthest possible distance from this window
+across every connected monitor. Half that distance gives half the line length;
+the farthest reachable monitor pixel gives the full length. Monitor positions,
+resolutions, and window moves/resizes are included automatically; empty gaps in
+staggered monitor layouts do not count. The line never intercepts clicks.
 
 ## Install
 

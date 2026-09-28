@@ -30,9 +30,9 @@ const shell = {
     workspace_manager: { ...signals, get_active_workspace: () => activeWorkspace },
     window_group: { add_child() {}, set_child_above_sibling() {} },
     get_pointer: () => pointer,
-    stage: { width: 300, height: 400 },
 };
-const main = { overview: { ...signals, visible: false }, uiGroup: { add_child() {} } };
+const main = { overview: { ...signals, visible: false }, uiGroup: { add_child() {} },
+    layoutManager: { monitors: [{ x: 100, y: 100, width: 1001, height: 201 }] } };
 const context = vm.createContext({
     St: { Widget: Actor, DrawingArea: Actor }, Extension: class { getSettings() { return settings; } },
     Main: main, global: shell, wsiLog() {},
@@ -40,7 +40,7 @@ const context = vm.createContext({
         timeout_add(_priority, _interval, callback) { timer = callback; return 42; },
         Source: { remove(id) { assert.equal(id, 42); timer = null; } } },
 });
-vm.runInContext(fs.readFileSync(path.join(root, 'window-selection-indicator@local/geometry.js'), 'utf8').replace('export function', 'function'), context);
+vm.runInContext(fs.readFileSync(path.join(root, 'window-selection-indicator@local/geometry.js'), 'utf8').replaceAll('export function', 'function'), context);
 const frame = { x: 100, y: 100, width: 200, height: 200 };
 for (const [x, y, expected] of [[400, 200, 100], [1000, 200, 100],
     [350, 200, 50], [150, 150, 0], [100, 100, 0], [-400, -400, 100]]) {
@@ -54,6 +54,39 @@ assert.equal(context.pointerVector(frame, 320, 200, 95).length, 20);
 assert.equal(context.pointerVector(frame, 500, 200, 100, 500).length, 40);
 assert.equal(context.pointerVector(frame, 400, 200, 100, 500).length, 20);
 assert.equal(context.pointerVector(frame, 350, 200, 100, 500).length, 10);
+// Full length only at the farthest reachable monitor pixel from this window.
+const monitors = main.layoutManager.monitors;
+const farthest = context.maximumPointerDistance(frame, monitors);
+assert.equal(farthest, 800);
+for (const [x, expected] of [[1100, 100], [700, 50], [500, 25], [301, 0.125], [200, 0]]) {
+    const vector = context.pointerVector(frame, x, 200, 100, farthest);
+    assert.equal(vector.length, expected);
+}
+const leftMonitor = { x: -900, y: -700, width: 501, height: 601 };
+assert.equal(context.maximumPointerDistance(frame, [...monitors, leftMonitor]), Math.hypot(1000, 800));
+// A bounding-box corner in a gap between staggered monitors is not a pixel.
+assert.equal(context.maximumPointerDistance({ x: 0, y: 0, width: 100, height: 100 }, [
+    { x: -1000, y: 0, width: 101, height: 101 },
+    { x: 0, y: 1000, width: 101, height: 101 },
+]), 1000);
+assert.equal(context.maximumPointerDistance(frame, []), 0);
+assert.equal(context.maximumPointerDistance(frame, [{ x: 0, y: 0, width: 0, height: 0 }]), 0);
+// Independently enumerate every pixel of small offset screens to verify the
+// corner optimization covers their full union and uses the window's edges.
+const smallFrame = { x: 1, y: 1, width: 2, height: 3 };
+const smallMonitors = [{ x: -4, y: 0, width: 3, height: 5 },
+    { x: 0, y: -4, width: 6, height: 3 }, { x: 0, y: 4, width: 4, height: 3 }];
+let bruteMaximum = 0;
+for (const monitor of smallMonitors) {
+    for (let x = monitor.x; x < monitor.x + monitor.width; x++) {
+        for (let y = monitor.y; y < monitor.y + monitor.height; y++) {
+            const horizontal = Math.max(smallFrame.x - x, 0, x - smallFrame.x - smallFrame.width);
+            const vertical = Math.max(smallFrame.y - y, 0, y - smallFrame.y - smallFrame.height);
+            bruteMaximum = Math.max(bruteMaximum, Math.hypot(horizontal, vertical));
+        }
+    }
+}
+assert.equal(context.maximumPointerDistance(smallFrame, smallMonitors), bruteMaximum);
 const source = fs.readFileSync(path.join(root, 'window-selection-indicator@local/extension.js'), 'utf8')
     .replace(/^import .*;$/gm, '')
     .replace('export default class', 'globalThis.Indicator = class');
@@ -88,7 +121,18 @@ assert.equal(extension._pointer.visible, false);
 pointerEnabled = true; settingsCallback();
 assert.equal(extension._pointer.visible, true, 'live opt-in');
 pointerMaxLength = 95; settingsCallback();
-assert.equal(extension._vector.length, 19, 'length changes live with desktop distance');
+assert.equal(extension._vector.length, 11.875, 'length changes live with desktop distance');
+main.layoutManager.monitors = [{ x: 100, y: 100, width: 2001, height: 201 }];
+timer();
+assert.ok(Math.abs(extension._vector.length - 95 * 100 / 1800) < 1e-8,
+    'monitor changes update the proportional scale while the pointer is stationary');
+window.get_frame_rect = () => ({ x: 100, y: 100, width: 100, height: 200 });
+timer();
+assert.ok(Math.abs(extension._vector.length - 95 * 200 / 1900) < 1e-8,
+    'window resize updates both distance and normalization');
+main.layoutManager.monitors = [];
+timer();
+assert.equal(extension._pointer.visible, false, 'no available monitor pixels');
 extension.disable();
 assert.equal(timer, null, 'timer removed on disable');
 assert.ok(actors.every(actor => actor.destroyed));
