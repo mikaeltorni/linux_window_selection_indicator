@@ -4,8 +4,8 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
-let pointerEnabled = true, settingsCallback;
-const settings = { get_boolean: () => pointerEnabled, connect(_name, callback) { settingsCallback = callback; return 1; }, disconnect() {} };
+let pointerEnabled = true, pointerMaxLength = 100, settingsCallback;
+const settings = { get_boolean: () => pointerEnabled, get_int: () => pointerMaxLength, connect(_name, callback) { settingsCallback = callback; return 1; }, disconnect() {} };
 let pointer = [20, 50], activeWorkspace = {}, timer;
 const actors = [];
 class Actor {
@@ -47,6 +47,8 @@ for (const [x, y, expected] of [[400, 200, 100], [1000, 200, 100],
     assert.ok(Math.abs(vector.length - expected) < 1e-8);
     assert.ok(Math.abs(Math.hypot(vector.dx, vector.dy) - expected) < 1e-8);
 }
+assert.equal(context.pointerVector(frame, 1000, 200, 95).length, 95);
+assert.equal(context.pointerVector(frame, 320, 200, 95).length, 20);
 const source = fs.readFileSync(path.join(root, 'window-selection-indicator@local/extension.js'), 'utf8')
     .replace(/^import .*;$/gm, '')
     .replace('export default class', 'globalThis.Indicator = class');
@@ -80,6 +82,8 @@ assert.equal(extension._outline.visible, true, 'outline remains enabled');
 assert.equal(extension._pointer.visible, false);
 pointerEnabled = true; settingsCallback();
 assert.equal(extension._pointer.visible, true, 'live opt-in');
+pointerMaxLength = 95; settingsCallback();
+assert.equal(extension._vector.length, 95, 'length changes live');
 extension.disable();
 assert.equal(timer, null, 'timer removed on disable');
 assert.ok(actors.every(actor => actor.destroyed));

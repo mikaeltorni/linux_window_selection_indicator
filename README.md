@@ -9,7 +9,7 @@ The extension does not inspect agent processes, statuses, or terminal classes.
 The optional `ptr` component draws a thin teal line from the cursor hotspot toward the
 nearest edge of the focused window, only on the active workspace. It disappears
 when the cursor enters the window, focus is absent, or the overview is open.
-The line grows with distance to the nearest window edge, up to 100px, and
+The line grows with distance to the nearest window edge, up to a configurable maximum (100px by default), and
 never intercepts clicks.
 
 ## Install
@@ -31,6 +31,13 @@ persist pointer enablement, for example `LWSI_PTR=off bash install.sh --default`
 The override takes precedence over selecting `ptr`; omitting it preserves your
 current setting unless you explicitly install or uninstall `ptr`. GNOME Shell
 reads the saved setting live, so an export in a terminal alone has no effect.
+
+Configure the maximum length in the installer menu's `ptr` settings, or use
+`bash install.sh --select outline,ptr --ptr-length 95`. `LWSI_PTR_LENGTH=95`
+provides the same setting through the environment; the CLI option takes
+precedence. The accepted range is 1–1000 logical pixels. Length changes apply
+live and preserve the pointer's on/off setting. `--configure-component ptr`
+opens the same length prompt, including before the first install.
 
 Agent Command Center can install this component from a sibling checkout. It
 continues to decide agent lifecycle colors and renders those in its own Kitty

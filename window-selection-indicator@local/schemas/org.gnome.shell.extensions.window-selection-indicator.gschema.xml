@@ -5,5 +5,10 @@
       <default>false</default>
       <summary>Show the optional cursor vector toward the focused window</summary>
     </key>
+    <key name="pointer-max-length" type="i">
+      <range min="1" max="1000"/>
+      <default>100</default>
+      <summary>Maximum cursor vector length in logical pixels</summary>
+    </key>
   </schema>
 </schemalist>

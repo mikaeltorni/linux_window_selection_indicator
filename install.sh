@@ -5,7 +5,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/logging.sh"
 source "$SCRIPT_DIR/lib/pointer_settings.sh"
-wsi_validate_pointer_env
+source "$SCRIPT_DIR/lib/installer.sh"
+wsi_parse_installer_args "$@"
 
 # Use the same framework resolver as sibling installers; fetch only the loader
 # for a standalone checkout, which then resolves/downloads its own dependencies.
@@ -28,7 +29,9 @@ isc_load_helpers
 isc_activate_components
 # Keep installer status on stderr through the project's centralized helper.
 msg() { wsi_log INFO "$*"; }
-source "$SCRIPT_DIR/lib/installer.sh"
 source "$SCRIPT_DIR/installer/components.sh"
 wsi_resolve_target
-component_main "$@"
+if [[ " ${FRAMEWORK_ARGS[*]} " == *' --help '* || " ${FRAMEWORK_ARGS[*]} " == *' -h '* ]]; then
+    printf 'Pointer options: --ptr-length N (1–1000, default 100); LWSI_PTR=on/off; LWSI_PTR_LENGTH=N\n'
+fi
+component_main "${FRAMEWORK_ARGS[@]}"

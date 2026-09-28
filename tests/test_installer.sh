@@ -10,9 +10,10 @@ cat > "$sandbox/bin/getent" <<'SH'
 printf '%s:x:%s:%s::%s:/bin/bash\n' "$USER" "$(id -u)" "$(id -g)" "$WSI_TEST_HOME"
 SH
 chmod +x "$sandbox/bin/getent"
+export ISC_FUNCTIONS_DIR="${ISC_FUNCTIONS_DIR:-$HOME/projects/linux_installation_scripts_functions}"
 export WSI_TEST_HOME="$sandbox/home" HOME="$sandbox/home" PATH="$sandbox/bin:$PATH"
 export GSETTINGS_BACKEND=keyfile XDG_CONFIG_HOME="$sandbox/config"
-export ISC_FUNCTIONS_DIR="${ISC_FUNCTIONS_DIR:-/home/mk/projects/linux_installation_scripts_functions}"
+export XDG_CACHE_HOME="$sandbox/cache"
 export XDG_STATE_HOME="$sandbox/state" ISC_LOG_DIR="$sandbox/log"
 listing="$(bash "$root/install.sh" --list-components)"
 [[ "$listing" == *$'ptr\tCursor vector toward the focused window\toff'* ]]
@@ -42,3 +43,32 @@ if LWSI_PTR='not on' WSI_TEST_HOME="$sandbox/invalid" bash "$root/install.sh" --
     exit 1
 fi
 [[ ! -e "$sandbox/invalid" ]]
+LWSI_PTR_LENGTH=95 bash "$root/install.sh" --select ptr >/dev/null
+[[ "$(gsettings get org.gnome.shell.extensions.window-selection-indicator pointer-max-length)" == 95 ]]
+bash "$root/install.sh" --ptr-length 75 --default >/dev/null
+[[ "$(gsettings get org.gnome.shell.extensions.window-selection-indicator pointer-max-length)" == 75 ]]
+for invalid in 0 -1 1001 '95 px' 1.5 99999999999999999999999999; do
+    if LWSI_PTR_LENGTH="$invalid" bash "$root/install.sh" --default >/dev/null 2>&1; then
+        printf 'invalid length was accepted: %s\n' "$invalid" >&2
+        exit 1
+    fi
+done
+[[ "$(gsettings get org.gnome.shell.extensions.window-selection-indicator pointer-max-length)" == 75 ]]
+printf '85\n' | bash "$root/install.sh" --configure-component ptr >/dev/null
+[[ "$(gsettings get org.gnome.shell.extensions.window-selection-indicator pointer-max-length)" == 85 ]]
+[[ "$(bash "$root/install.sh" --list-configurable-components)" == ptr ]]
+
+for args in '--ptr-length=' '--ptr-length'; do
+    if bash "$root/install.sh" "$args" >/dev/null 2>&1; then exit 1; fi
+done
+LWSI_PTR_LENGTH=90 bash "$root/install.sh" --default --ptr-length=0095 >/dev/null
+[[ "$(gsettings get org.gnome.shell.extensions.window-selection-indicator pointer-max-length)" == 95 ]]
+# Configure before installation: no extension files are deployed by the prompt.
+printf '65\n' | env WSI_TEST_HOME="$sandbox/fresh" XDG_CONFIG_HOME="$sandbox/fresh-config" \
+    XDG_CACHE_HOME="$sandbox/fresh-cache" bash "$root/install.sh" --configure-component ptr >/dev/null
+[[ ! -d "$sandbox/fresh/.local/share/gnome-shell/extensions" ]]
+env WSI_TEST_HOME="$sandbox/fresh" XDG_CONFIG_HOME="$sandbox/fresh-config" \
+    XDG_CACHE_HOME="$sandbox/fresh-cache" bash "$root/install.sh" --select outline,ptr >/dev/null
+[[ "$(env XDG_CONFIG_HOME="$sandbox/fresh-config" \
+    GSETTINGS_SCHEMA_DIR="$sandbox/fresh/.local/share/gnome-shell/extensions/window-selection-indicator@local/schemas" \
+    gsettings get org.gnome.shell.extensions.window-selection-indicator pointer-max-length)" == 65 ]]
