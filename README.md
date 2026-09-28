@@ -17,16 +17,14 @@ the farthest reachable monitor pixel gives the full length. Monitor positions,
 resolutions, and window moves/resizes are included automatically; empty gaps in
 staggered monitor layouts do not count. The line never intercepts clicks.
 
-The pointer polls every 4ms (250 samples per second) at high priority and samples
-again at the stage's `before-paint` signal, after layout and frame preparation.
-While moving steadily, it projects the line origin by one refresh interval to
-compensate for the cursor advancing before the frame appears. This is bounded
-to 16ms and 64px, stays within actual monitor pixels, and drops old velocity on
-reversals, cursor warps, focus changes and pauses. Actual cursor position controls
-window entry, so the line disappears inside the window without waiting for
-prediction. A sudden stop can briefly show the projected origin until the next
-frame corrects it. Visible updates still depend on compositor/display timing;
-polling at 250Hz does not make the display render at 250Hz. Window/monitor geometry is
+The pointer uses the original direct tracking behavior without motion prediction
+or smoothing. High-priority polling targets 144 samples per second (about 6.94ms)
+with monotonic deadlines and 6/7ms timer delays, preventing cumulative rounding
+drift. A delayed callback resumes normally instead of issuing a catch-up burst.
+The tracker also samples in Clutter's pre-paint callback. Visible updates still
+depend on compositor/display timing: a 120Hz monitor cannot display 144 frames
+per second just because the tracker targets 144Hz. The installer preserves
+display settings. Window/monitor geometry is
 cached until it changes; a reusable thin line texture moves, rotates and scales
 on the GPU without repainting or resizing its drawing surface on every motion.
 Stationary samples skip geometry and drawing updates, and disabling `ptr`
