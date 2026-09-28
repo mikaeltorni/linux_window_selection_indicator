@@ -40,6 +40,9 @@ PY
 )" || return 1
         run_as_target gsettings set org.gnome.shell enabled-extensions "$updated" || return 1
     fi
+    if [[ -n "${LWSI_PTR_LENGTH:-}" ]]; then
+        wsi_set_pointer_length "$LWSI_PTR_LENGTH" || return 1
+    fi
     if [[ -n "${LWSI_PTR:-}" ]]; then
         wsi_set_pointer_enabled "$LWSI_PTR" || return 1
     fi
@@ -69,4 +72,53 @@ wsi_detect_pointer() {
 wsi_uninstall_outline() {
     run_as_target gnome-extensions disable window-selection-indicator@local || return 1
     wsi_log INFO 'extension disabled'
+}
+
+# Remove only our length option; all component flags keep the shared dispatcher.
+# CLI values take precedence over environment values. Missing values fail early.
+wsi_parse_installer_args() {
+    FRAMEWORK_ARGS=()
+    while (( $# )); do
+        case "$1" in
+            --ptr-length)
+                [[ $# -ge 2 ]] || { wsi_log ERROR '--ptr-length needs a value'; return 2; }
+                wsi_validate_pointer_length "$2" || return $?
+                LWSI_PTR_LENGTH="$2"; shift 2 ;;
+            --ptr-length=*)
+                wsi_validate_pointer_length "${1#*=}" || return $?
+                LWSI_PTR_LENGTH="${1#*=}"; shift ;;
+            *) FRAMEWORK_ARGS+=("$1"); shift ;;
+        esac
+    done
+    wsi_validate_pointer_env
+}
+
+# Provide a schema for menu edits even before the first extension installation.
+# The cache is user-owned; settings persist in the same GSettings path and will
+# be read by the installed schema after deployment. No repository files change.
+wsi_prepare_settings() {
+    WSI_SETTINGS_DIR="${XDG_CACHE_HOME:-$TARGET_HOME/.cache}/linux-window-selection-indicator/schemas"
+    local schema="$WSI_SCHEMA.gschema.xml"
+    run_as_target install -D -m 0644 "$SCRIPT_DIR/window-selection-indicator@local/schemas/$schema" "$WSI_SETTINGS_DIR/$schema" || return 1
+    run_as_target glib-compile-schemas --strict "$WSI_SETTINGS_DIR" || return 1
+}
+
+# Nested installer menu edit: save a maximum length, preserving on/off state.
+wsi_configure_pointer() {
+    wsi_prepare_settings || return 1
+    local current typed
+    current="${LWSI_PTR_LENGTH:-$(run_as_target env GSETTINGS_SCHEMA_DIR="$WSI_SETTINGS_DIR" gsettings get "$WSI_SCHEMA" pointer-max-length)}"
+    printf 'Maximum cursor vector length in pixels, 1–1000 [%s]: ' "$current" >&2
+    read -r typed || return 1
+    LWSI_PTR_LENGTH="${typed:-$current}"
+    wsi_set_pointer_length "$LWSI_PTR_LENGTH"
+}
+
+# Side-effect-free friendly menu value, including fresh-install defaults.
+wsi_pointer_config_status() {
+    local length="${LWSI_PTR_LENGTH:-100}"
+    if [[ -z "${LWSI_PTR_LENGTH:-}" && -f "$WSI_TARGET_DIR/schemas/gschemas.compiled" ]]; then
+        length="$(run_as_target env GSETTINGS_SCHEMA_DIR="$WSI_TARGET_DIR/schemas" gsettings get "$WSI_SCHEMA" pointer-max-length 2>/dev/null)" || length=100
+    fi
+    printf '%spx max\n' "$length"
 }

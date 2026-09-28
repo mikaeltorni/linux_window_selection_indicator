@@ -102,6 +102,7 @@ export default class WindowSelectionIndicator extends Extension {
     /** Start polling only while the optional pointer setting is enabled. */
     _syncPointerSettings() {
         this._pointerEnabled = this._settings.get_boolean('pointer-enabled');
+        this._pointerMaxLength = this._settings.get_int('pointer-max-length');
         if (this._pointerTimer) {
             GLib.Source.remove(this._pointerTimer);
             this._pointerTimer = 0;
@@ -113,7 +114,7 @@ export default class WindowSelectionIndicator extends Extension {
             });
         }
         this._updatePointer();
-        wsiLog('info', `cursor vector ${this._pointerEnabled ? 'enabled' : 'disabled'}`);
+        wsiLog('info', `cursor vector ${this._pointerEnabled ? 'enabled' : 'disabled'}, max ${this._pointerMaxLength}px`);
     }
 
     /** Track the pointer only for a visible focused window on this workspace. */
@@ -130,7 +131,7 @@ export default class WindowSelectionIndicator extends Extension {
             return;
         }
         const [x, y] = global.get_pointer();
-        const vector = pointerVector(frame, x, y);
+        const vector = pointerVector(frame, x, y, this._pointerMaxLength);
         if (vector.length === 0) {
             this._pointer.hide();
             return;
