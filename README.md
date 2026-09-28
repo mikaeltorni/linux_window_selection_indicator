@@ -6,11 +6,12 @@ workspace changes on every normal window, including terminals, browsers, and
 editors.
 The extension does not inspect agent processes, statuses, or terminal classes.
 
-The optional `ptr` component draws a thin teal line from the cursor hotspot toward the
-nearest edge of the focused window, only on the active workspace. It disappears
+The optional `ptr` component draws a thin teal line from the cursor hotspot
+toward the nearest edge of the focused window, only on the active workspace. It disappears
 when the cursor enters the window, focus is absent, or the overview is open.
-The line grows with distance to the nearest window edge, up to a configurable maximum (100px by default), and
-never intercepts clicks.
+The line grows with distance to the nearest window edge, up to a configurable
+maximum (100px by default). Beyond that distance it remains a short directional
+line, rather than spanning the whole gap. It never intercepts clicks.
 
 ## Install
 
@@ -20,8 +21,7 @@ Use `bash install.sh --select outline,ptr` to install both. Use
 `bash install.sh --uninstall ptr` to disable only the vector. `--default`, `--all`,
 `--list-components`, `--detect`, and `--reconfigure ptr` use the shared framework.
 
-The installer copies the extension to
-the desktop user's `~/.local/share/gnome-shell/extensions` and enables it.
+The installer copies the extension to the desktop user's `~/.local/share/gnome-shell/extensions` and enables it.
 On X11, new extension code requires GNOME Shell's in-place Alt+F2 `r` reload;
 on Wayland, sign out and back in after installation. No extra Python packages
 or root access are required.
@@ -67,9 +67,25 @@ so the teal focus indicator never appears as content in the Phrase Automation
 note display. When an ACC terminal is focused, its ACC status outline and this
 focus indicator are independent layers.
 
-The indicator is stacked immediately above the focused window in GNOME's
+The focused-window outline is stacked immediately above the window in GNOME's
 window group. Always on top application popups, including Phrase Automation's
 notes overlay, and GNOME Shell chrome remain above it.
+
+## Verification
+
+From the project checkout, run:
+
+```sh
+node tests/test_pointer.cjs
+bash tests/test_installer.sh
+bash tests/test_extension_contract.sh
+```
+
+The pointer tests use a mocked Shell; installer tests use a temporary home and
+an isolated settings backend. They cover workspace/focus visibility, shrinking
+and length limits, live enablement, installer selection, configuration before
+the first install, invalid input, and the installed command and copy lists.
+They do not open windows or reload your desktop. Node is only needed for tests.
 
 ## Disclaimer
 
