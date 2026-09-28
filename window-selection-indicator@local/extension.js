@@ -38,6 +38,7 @@ export default class WindowSelectionIndicator extends Extension {
         this._overviewShowing = Main.overview.connect('showing', () => this._hide());
         this._overviewHidden = Main.overview.connect('hidden', () => this._syncFocus());
         this._pointer = new St.DrawingArea({ reactive: false, visible: false });
+        this._pointer.set_position(0, 0);
         this._pointer.connect('repaint', () => this._paintPointer());
         Main.uiGroup.add_child(this._pointer);
         this._pointerTimer = 0;
@@ -173,7 +174,7 @@ export default class WindowSelectionIndicator extends Extension {
         }
         // Pivot is the texture's line start, so rotation and scaling keep the
         // origin exactly on the cursor without allocating another surface.
-        this._pointer.set_position(x - POINTER_PADDING, y - POINTER_PADDING);
+        this._pointer.set_translation(x - POINTER_PADDING, y - POINTER_PADDING, 0);
         this._pointer.rotation_angle_z = Math.atan2(vector.dy, vector.dx) * 180 / Math.PI;
         this._pointer.set_scale(vector.length / this._pointerMaxLength, 1);
         this._pointer.show();
