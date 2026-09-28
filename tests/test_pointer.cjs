@@ -6,7 +6,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 let pointerEnabled = true, pointerMaxLength = 100, settingsCallback;
 const settings = { get_boolean: () => pointerEnabled, get_int: () => pointerMaxLength, connect(_name, callback) { settingsCallback = callback; return 1; }, disconnect() {} };
-let pointer = [20, 50], activeWorkspace = {}, timer;
+let pointer = [20, 50], activeWorkspace = {}, timer, beforePaint;
 const actors = [];
 class Actor {
     constructor(props) { Object.assign(this, props); actors.push(this); }
@@ -36,6 +36,11 @@ const main = { overview: { ...signals, visible: false }, uiGroup: { add_child() 
 const context = vm.createContext({
     St: { Widget: Actor, DrawingArea: Actor }, Extension: class { getSettings() { return settings; } },
     Main: main, global: shell, wsiLog() {},
+    Clutter: { RepaintFlags: { PRE_PAINT: 1 },
+        threads_add_repaint_func_full(flags, callback) {
+            assert.equal(flags, 1); beforePaint = callback; return 43;
+        },
+        threads_remove_repaint_func(id) { assert.equal(id, 43); beforePaint = null; } },
     GLib: { PRIORITY_DEFAULT: 0, SOURCE_CONTINUE: true,
         timeout_add(_priority, _interval, callback) { timer = callback; return 42; },
         Source: { remove(id) { assert.equal(id, 42); timer = null; } } },
@@ -97,6 +102,9 @@ assert.ok(extension._pointer, 'pointer actor created');
 assert.equal(extension._pointer.reactive, false, 'line does not intercept mouse');
 assert.equal(extension._pointer.visible, true);
 assert.equal(typeof timer, 'function');
+assert.equal(typeof beforePaint, 'function');
+pointer = [700, 200]; beforePaint();
+assert.equal(extension._vector.x, 700, 'sample the latest cursor immediately before rendering');
 pointer = [150, 150]; timer();
 assert.equal(extension._pointer.visible, false, 'inside the window');
 pointer = [400, 200]; timer();
@@ -113,6 +121,7 @@ shell.display.focus_window = null; extension._syncFocus(); timer();
 assert.equal(extension._pointer.visible, false, 'no selected window');
 pointerEnabled = false; settingsCallback();
 assert.equal(timer, null, 'no polling when optional pointer is disabled');
+assert.equal(beforePaint, null, 'no pre-paint callback while disabled');
 assert.equal(extension._pointer.visible, false);
 assert.equal(extension._outline.visible, false); // Focus is still absent.
 shell.display.focus_window = window; extension._syncFocus();
@@ -135,4 +144,5 @@ timer();
 assert.equal(extension._pointer.visible, false, 'no available monitor pixels');
 extension.disable();
 assert.equal(timer, null, 'timer removed on disable');
+assert.equal(beforePaint, null, 'pre-paint callback removed on disable');
 assert.ok(actors.every(actor => actor.destroyed));

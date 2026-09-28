@@ -17,6 +17,9 @@ the farthest reachable monitor pixel gives the full length. Monitor positions,
 resolutions, and window moves/resizes are included automatically; empty gaps in
 staggered monitor layouts do not count. The line never intercepts clicks.
 
+The pointer samples the latest cursor position immediately before the compositor
+paints each frame, in addition to its motion polling, reducing stale-position lag.
+
 ## Install
 
 Run `bash install.sh` from this checkout for the component menu (or defaults
