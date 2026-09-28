@@ -26,6 +26,12 @@ On X11, new extension code requires GNOME Shell's in-place Alt+F2 `r` reload;
 on Wayland, sign out and back in after installation. No extra Python packages
 or root access are required.
 
+Set `LWSI_PTR=on` or `LWSI_PTR=off` when running the installer to explicitly
+persist pointer enablement, for example `LWSI_PTR=off bash install.sh --default`.
+The override takes precedence over selecting `ptr`; omitting it preserves your
+current setting unless you explicitly install or uninstall `ptr`. GNOME Shell
+reads the saved setting live, so an export in a terminal alone has no effect.
+
 Agent Command Center can install this component from a sibling checkout. It
 continues to decide agent lifecycle colors and renders those in its own Kitty
 outlines; this repository owns only the focused-window indication.

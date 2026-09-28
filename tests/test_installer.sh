@@ -33,3 +33,12 @@ done
 export GSETTINGS_SCHEMA_DIR="$HOME/.local/share/gnome-shell/extensions/window-selection-indicator@local/schemas"
 [[ "$(gsettings get org.gnome.shell.extensions.window-selection-indicator pointer-enabled)" == false ]]
 glib-compile-schemas --strict --dry-run "$root/window-selection-indicator@local/schemas"
+LWSI_PTR=on bash "$root/install.sh" --default >/dev/null
+[[ "$(gsettings get org.gnome.shell.extensions.window-selection-indicator pointer-enabled)" == true ]]
+LWSI_PTR=off bash "$root/install.sh" --all >/dev/null
+[[ "$(gsettings get org.gnome.shell.extensions.window-selection-indicator pointer-enabled)" == false ]]
+if LWSI_PTR='not on' WSI_TEST_HOME="$sandbox/invalid" bash "$root/install.sh" --default >/dev/null 2>&1; then
+    printf 'invalid pointer environment was accepted\n' >&2
+    exit 1
+fi
+[[ ! -e "$sandbox/invalid" ]]

@@ -4,6 +4,8 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/logging.sh"
+source "$SCRIPT_DIR/lib/pointer_settings.sh"
+wsi_validate_pointer_env
 
 # Use the same framework resolver as sibling installers; fetch only the loader
 # for a standalone checkout, which then resolves/downloads its own dependencies.
