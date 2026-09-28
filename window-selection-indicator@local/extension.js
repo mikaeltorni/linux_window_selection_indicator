@@ -1,14 +1,16 @@
 /** Draw a focus outline for normal windows, independent of application state. */
 import St from 'gi://St';
+import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
-import { maximumPointerDistance, pointerVector, PointerMotion } from './geometry.js';
+import { maximumPointerDistance, pointerVector } from './geometry.js';
 import { wsiLog } from './logging.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const BORDER_PX = 4;
 const BORDER_COLOR = 'rgba(0, 255, 230, 0.6)';
-const POINTER_POLL_MS = 4;
+const POINTER_SAMPLE_HZ = 144;
+const POINTER_SAMPLE_US = 1000000 / POINTER_SAMPLE_HZ;
 const POINTER_PADDING = 2;
 
 /** Return true for a visible application window eligible for the indicator. */
@@ -42,7 +44,6 @@ export default class WindowSelectionIndicator extends Extension {
         Main.uiGroup.add_child(this._pointer);
         this._pointerTimer = 0;
         this._pointerBeforePaint = 0;
-        this._pointerMotion = new PointerMotion();
         this._settings = this.getSettings();
         this._settingsSignal = this._settings.connect('changed', () => this._syncPointerSettings());
         this._syncPointerSettings();
@@ -63,7 +64,6 @@ export default class WindowSelectionIndicator extends Extension {
     _hide() {
         this._pointerFrame = null;
         this._pointerLastX = NaN;
-        this._pointerMotion.reset();
         this._outline.hide();
         this._pointer.hide();
     }
@@ -110,7 +110,6 @@ export default class WindowSelectionIndicator extends Extension {
         this._pointerFrame = frame;
         this._pointerMaxDistance = maximumPointerDistance(frame, Main.layoutManager.monitors);
         this._pointerLastX = NaN;
-        this._pointerMotion.reset();
         this._updatePointer();
     }
 
@@ -126,29 +125,47 @@ export default class WindowSelectionIndicator extends Extension {
             (this._pointerMaxLength + 2 * POINTER_PADDING), 0.5);
         this._pointer.queue_repaint();
         this._pointerLastX = NaN;
-        this._pointerMotion.reset();
         this._stopPointerTracking();
         if (this._pointerEnabled) {
-            // PRE_PAINT repaint functions run before layout/frame preparation.
-            // This stage signal samples later, immediately before drawing.
-            this._pointerBeforePaint = global.stage.connect('before-paint',
-                (_stage, view) => {
-                    const rate = view.get_refresh_rate();
-                    this._updatePointer(rate > 0 ? 1000000 / rate : 0);
+            // Refresh again before the compositor draws: timer samples may be
+            // older than the cursor by the time a scheduled frame is presented.
+            this._pointerBeforePaint = Clutter.threads_add_repaint_func_full(
+                Clutter.RepaintFlags.PRE_PAINT, () => {
+                    this._updatePointer();
+                    return GLib.SOURCE_CONTINUE;
                 });
-            this._pointerTimer = GLib.timeout_add(GLib.PRIORITY_HIGH, POINTER_POLL_MS, () => {
-                this._updatePointer();
-                return GLib.SOURCE_CONTINUE;
-            });
+            this._pointerNextSample = GLib.get_monotonic_time() + POINTER_SAMPLE_US;
+            this._queuePointerSample();
         }
         this._updatePointer();
-        wsiLog('info', `cursor vector ${this._pointerEnabled ? 'enabled' : 'disabled'}, max ${this._pointerMaxLength}px, ${POINTER_POLL_MS}ms samples with late-paint motion compensation`);
+        wsiLog('info', `cursor vector ${this._pointerEnabled ? 'enabled' : 'disabled'}, max ${this._pointerMaxLength}px, ${POINTER_SAMPLE_HZ}Hz direct samples with pre-paint refresh`);
+    }
+
+    /** Schedule the next 144Hz probe without accumulating millisecond drift.
+     * GLib timers use whole milliseconds, so deadlines alternate 6/7ms waits.
+     * Missed deadlines resume normally instead of flooding the Shell with work.
+     */
+    _queuePointerSample() {
+        if (!this._pointerEnabled)
+            return;
+        const delay = Math.max(1, Math.ceil(
+            (this._pointerNextSample - GLib.get_monotonic_time()) / 1000));
+        this._pointerTimer = GLib.timeout_add(GLib.PRIORITY_HIGH, delay, () => {
+            this._pointerTimer = 0;
+            this._updatePointer();
+            this._pointerNextSample += POINTER_SAMPLE_US;
+            const now = GLib.get_monotonic_time();
+            if (this._pointerNextSample <= now)
+                this._pointerNextSample = now + POINTER_SAMPLE_US;
+            this._queuePointerSample();
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     /** Release both callbacks so disabling the optional vector leaves no work. */
     _stopPointerTracking() {
         if (this._pointerBeforePaint) {
-            global.stage.disconnect(this._pointerBeforePaint);
+            Clutter.threads_remove_repaint_func(this._pointerBeforePaint);
             this._pointerBeforePaint = 0;
         }
         if (this._pointerTimer) {
@@ -157,41 +174,19 @@ export default class WindowSelectionIndicator extends Extension {
         }
     }
 
-    /** Sample actual input; leadUs compensates at most one presentation frame. */
-    _updatePointer(leadUs = 0) {
+    /** Sample at high priority and pre-paint; reuse all stationary geometry. */
+    _updatePointer() {
         if (!this._pointerEnabled || !this._pointerFrame) {
             this._pointer.hide();
             return;
         }
-        const [actualX, actualY] = global.get_pointer();
-        const now = GLib.get_monotonic_time();
-        this._pointerMotion.sample(actualX, actualY, now);
-        const predicting = leadUs > 0 && this._pointerMotion.steady &&
-            now - this._pointerMotion.time <= 8000;
-        if (!predicting && actualX === this._pointerLastX && actualY === this._pointerLastY)
-            return;
-        // Actual input owns window entry: prediction must never keep a line
-        // visible inside the window or hide it early on approach.
-        let vector = pointerVector(this._pointerFrame, actualX, actualY,
-            this._pointerMaxLength, this._pointerMaxDistance);
-        let x = actualX, y = actualY;
-        if (predicting && vector.length > 0) {
-            const monitor = Main.layoutManager.monitors.find(item =>
-                actualX >= item.x && actualX < item.x + item.width &&
-                actualY >= item.y && actualY < item.y + item.height);
-            const [projectedX, projectedY] = this._pointerMotion.project(now, leadUs, monitor);
-            const projected = pointerVector(this._pointerFrame, projectedX, projectedY,
-                this._pointerMaxLength, this._pointerMaxDistance);
-            if (projected.length > 0) {
-                x = projectedX;
-                y = projectedY;
-                vector = projected;
-            }
-        }
+        const [x, y] = global.get_pointer();
         if (x === this._pointerLastX && y === this._pointerLastY)
             return;
         this._pointerLastX = x;
         this._pointerLastY = y;
+        const vector = pointerVector(this._pointerFrame, x, y, this._pointerMaxLength,
+            this._pointerMaxDistance);
         this._vector = vector;
         if (vector.length === 0) {
             this._pointer.hide();
