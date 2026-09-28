@@ -1,49 +1,32 @@
 #!/usr/bin/env bash
-# Install the state-independent GNOME Shell focus indicator for the desktop user.
+# Install the teal outline plus the opt-in cursor vector, sudo-free by default.
+# Usage: bash install.sh [--default|--all|--select outline,ptr|--detect|--uninstall ptr]
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/logging.sh"
 
-source_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$source_dir/lib/logging.sh"
-target_user="${SUDO_USER:-$USER}"
-target_home="$(getent passwd "$target_user" | cut -d: -f6)"
-uuid="window-selection-indicator@local"
-
-if [[ -z "$target_home" || "$target_user" == root ]]; then
-    wsi_log ERROR 'desktop user could not be resolved'
-    exit 1
-fi
-
-run_as_target() {
-    if [[ "$(id -u)" -eq 0 ]]; then
-        sudo -H -u "$target_user" env HOME="$target_home" \
-            DISPLAY="${DISPLAY:-:0}" \
-            DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u "$target_user")/bus" "$@"
-    else
-        "$@"
+# Use the same framework resolver as sibling installers; fetch only the loader
+# for a standalone checkout, which then resolves/downloads its own dependencies.
+for framework in "${ISC_FUNCTIONS_DIR:-}" \
+    "$SCRIPT_DIR/../linux_installation_scripts_functions" \
+    "${HOME}/projects/linux_installation_scripts_functions"; do
+    if [[ -n "$framework" && -f "$framework/component_loader.sh" ]]; then
+        source "$framework/component_loader.sh"
+        break
     fi
-}
-
-target_dir="$target_home/.local/share/gnome-shell/extensions/$uuid"
-wsi_log INFO "installing extension into $target_dir"
-for file in extension.js geometry.js logging.js; do
-    run_as_target install -D -m 0644 "$source_dir/$uuid/$file" "$target_dir/$file"
 done
-run_as_target install -D -m 0644 "$source_dir/$uuid/metadata.json" "$target_dir/metadata.json"
-# The running Shell may not discover a newly copied extension until its next
-# X11 in-place reload or Wayland login. Persist the enablement now so that
-# first discovery activates it without a second installer run.
-enabled="$(run_as_target gsettings get org.gnome.shell enabled-extensions)"
-if [[ "$enabled" != *"'$uuid'"* ]]; then
-    updated="$(python3 - "$enabled" "$uuid" <<'PY'
-import ast
-import json
-import sys
-
-extensions = ast.literal_eval(sys.argv[1].removeprefix('@as '))
-extensions.append(sys.argv[2])
-print(json.dumps(extensions))
-PY
-)"
-    run_as_target gsettings set org.gnome.shell enabled-extensions "$updated"
+if ! declare -F isc_activate_components >/dev/null; then
+    framework="${XDG_CACHE_HOME:-$HOME/.cache}/installation_scripts/components"
+    mkdir -p "$framework"
+    curl -fsSL "https://raw.githubusercontent.com/mikaeltorni/linux_installation_scripts_functions/${ISC_FUNCTIONS_REF:-master}/component_loader.sh" \
+        -o "$framework/component_loader.sh"
+    source "$framework/component_loader.sh"
 fi
-wsi_log INFO "installed $uuid"
+isc_load_helpers
+isc_activate_components
+# Keep installer status on stderr through the project's centralized helper.
+msg() { wsi_log INFO "$*"; }
+source "$SCRIPT_DIR/lib/installer.sh"
+source "$SCRIPT_DIR/installer/components.sh"
+wsi_resolve_target
+component_main "$@"

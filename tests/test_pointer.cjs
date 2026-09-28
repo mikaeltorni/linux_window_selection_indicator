@@ -4,6 +4,8 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
+let pointerEnabled = true, settingsCallback;
+const settings = { get_boolean: () => pointerEnabled, connect(_name, callback) { settingsCallback = callback; return 1; }, disconnect() {} };
 let pointer = [20, 50], activeWorkspace = {}, timer;
 const actors = [];
 class Actor {
@@ -31,7 +33,7 @@ const shell = {
 };
 const main = { overview: { ...signals, visible: false }, uiGroup: { add_child() {} } };
 const context = vm.createContext({
-    St: { Widget: Actor, DrawingArea: Actor }, Extension: class {},
+    St: { Widget: Actor, DrawingArea: Actor }, Extension: class { getSettings() { return settings; } },
     Main: main, global: shell, wsiLog() {},
     GLib: { PRIORITY_DEFAULT: 0, SOURCE_CONTINUE: true,
         timeout_add(_priority, _interval, callback) { timer = callback; return 42; },
@@ -62,6 +64,15 @@ assert.equal(extension._pointer.visible, false, 'minimized');
 window.minimized = false;
 shell.display.focus_window = null; extension._syncFocus(); timer();
 assert.equal(extension._pointer.visible, false, 'no selected window');
+pointerEnabled = false; settingsCallback();
+assert.equal(timer, null, 'no polling when optional pointer is disabled');
+assert.equal(extension._pointer.visible, false);
+assert.equal(extension._outline.visible, false); // Focus is still absent.
+shell.display.focus_window = window; extension._syncFocus();
+assert.equal(extension._outline.visible, true, 'outline remains enabled');
+assert.equal(extension._pointer.visible, false);
+pointerEnabled = true; settingsCallback();
+assert.equal(extension._pointer.visible, true, 'live opt-in');
 extension.disable();
 assert.equal(timer, null, 'timer removed on disable');
 assert.ok(actors.every(actor => actor.destroyed));
