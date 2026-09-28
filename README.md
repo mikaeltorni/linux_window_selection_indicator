@@ -9,9 +9,10 @@ The extension does not inspect agent processes, statuses, or terminal classes.
 The optional `ptr` component draws a thin teal line from the cursor hotspot
 toward the nearest edge of the focused window, only on the active workspace. It disappears
 when the cursor enters the window, focus is absent, or the overview is open.
-The line grows with distance to the nearest window edge, up to a configurable
-maximum (100px by default). Beyond that distance it remains a short directional
-line, rather than spanning the whole gap. It never intercepts clicks.
+The line shortens proportionally as the cursor approaches the nearest window
+edge, using the desktop diagonal as its distance scale. The configured length
+(100px by default) is its maximum, rather than a near-window threshold.
+It never intercepts clicks.
 
 ## Install
 

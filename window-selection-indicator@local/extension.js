@@ -131,7 +131,8 @@ export default class WindowSelectionIndicator extends Extension {
             return;
         }
         const [x, y] = global.get_pointer();
-        const vector = pointerVector(frame, x, y, this._pointerMaxLength);
+        const vector = pointerVector(frame, x, y, this._pointerMaxLength,
+            Math.hypot(global.stage.width, global.stage.height));
         if (vector.length === 0) {
             this._pointer.hide();
             return;
