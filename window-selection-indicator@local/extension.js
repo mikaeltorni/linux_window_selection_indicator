@@ -1,5 +1,6 @@
 /** Draw a focus outline for normal windows, independent of application state. */
 import St from 'gi://St';
+import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import { maximumPointerDistance, pointerVector } from './geometry.js';
 import { wsiLog } from './logging.js';
@@ -37,6 +38,7 @@ export default class WindowSelectionIndicator extends Extension {
         this._pointer.connect('repaint', () => this._paintPointer());
         Main.uiGroup.add_child(this._pointer);
         this._pointerTimer = 0;
+        this._pointerBeforePaint = 0;
         this._settings = this.getSettings();
         this._settingsSignal = this._settings.connect('changed', () => this._syncPointerSettings());
         this._syncPointerSettings();
@@ -103,11 +105,15 @@ export default class WindowSelectionIndicator extends Extension {
     _syncPointerSettings() {
         this._pointerEnabled = this._settings.get_boolean('pointer-enabled');
         this._pointerMaxLength = this._settings.get_int('pointer-max-length');
-        if (this._pointerTimer) {
-            GLib.Source.remove(this._pointerTimer);
-            this._pointerTimer = 0;
-        }
+        this._stopPointerTracking();
         if (this._pointerEnabled) {
+            // Refresh again before the compositor draws: timer samples may be
+            // older than the cursor by the time a scheduled frame is presented.
+            this._pointerBeforePaint = Clutter.threads_add_repaint_func_full(
+                Clutter.RepaintFlags.PRE_PAINT, () => {
+                    this._updatePointer();
+                    return GLib.SOURCE_CONTINUE;
+                });
             this._pointerTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 16, () => {
                 this._updatePointer();
                 return GLib.SOURCE_CONTINUE;
@@ -115,6 +121,18 @@ export default class WindowSelectionIndicator extends Extension {
         }
         this._updatePointer();
         wsiLog('info', `cursor vector ${this._pointerEnabled ? 'enabled' : 'disabled'}, max ${this._pointerMaxLength}px`);
+    }
+
+    /** Release both callbacks so disabling the optional vector leaves no work. */
+    _stopPointerTracking() {
+        if (this._pointerBeforePaint) {
+            Clutter.threads_remove_repaint_func(this._pointerBeforePaint);
+            this._pointerBeforePaint = 0;
+        }
+        if (this._pointerTimer) {
+            GLib.Source.remove(this._pointerTimer);
+            this._pointerTimer = 0;
+        }
     }
 
     /** Track the pointer only for a visible focused window on this workspace. */
@@ -170,9 +188,7 @@ export default class WindowSelectionIndicator extends Extension {
 
     disable() {
         this._settings.disconnect(this._settingsSignal);
-        if (this._pointerTimer)
-            GLib.Source.remove(this._pointerTimer);
-        this._pointerTimer = 0;
+        this._stopPointerTracking();
         this._pointer.destroy();
         this._settings = null;
         this._disconnectWindow();
