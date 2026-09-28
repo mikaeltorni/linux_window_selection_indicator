@@ -1,7 +1,7 @@
 /** Draw a focus outline for normal windows, independent of application state. */
 import St from 'gi://St';
 import GLib from 'gi://GLib';
-import { pointerVector } from './geometry.js';
+import { maximumPointerDistance, pointerVector } from './geometry.js';
 import { wsiLog } from './logging.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -41,7 +41,7 @@ export default class WindowSelectionIndicator extends Extension {
         this._settingsSignal = this._settings.connect('changed', () => this._syncPointerSettings());
         this._syncPointerSettings();
         this._syncFocus();
-        wsiLog('info', 'enabled with cursor vector');
+        wsiLog('info', 'enabled with cursor vector scaled across all monitors');
     }
 
     /** Detach listeners from the previous focused window. */
@@ -132,7 +132,7 @@ export default class WindowSelectionIndicator extends Extension {
         }
         const [x, y] = global.get_pointer();
         const vector = pointerVector(frame, x, y, this._pointerMaxLength,
-            Math.hypot(global.stage.width, global.stage.height));
+            maximumPointerDistance(frame, Main.layoutManager.monitors));
         if (vector.length === 0) {
             this._pointer.hide();
             return;
