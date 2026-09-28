@@ -40,23 +40,22 @@ PY
 )" || return 1
         run_as_target gsettings set org.gnome.shell enabled-extensions "$updated" || return 1
     fi
+    if [[ -n "${LWSI_PTR:-}" ]]; then
+        wsi_set_pointer_enabled "$LWSI_PTR" || return 1
+    fi
     wsi_log INFO "installed $uuid"
 }
 
 # Install and opt in without changing the focused-window outline.
 wsi_install_pointer() {
     wsi_install || return 1
-    run_as_target env GSETTINGS_SCHEMA_DIR="$WSI_TARGET_DIR/schemas" \
-        gsettings set "$WSI_SCHEMA" pointer-enabled true || return 1
-    wsi_log INFO 'cursor vector enabled'
+    wsi_set_pointer_enabled "${LWSI_PTR:-on}"
 }
 
 # Disable just the optional vector; settings apply live after code activation.
 wsi_disable_pointer() {
     [[ -f "$WSI_TARGET_DIR/schemas/gschemas.compiled" ]] || return 0
-    run_as_target env GSETTINGS_SCHEMA_DIR="$WSI_TARGET_DIR/schemas" \
-        gsettings set "$WSI_SCHEMA" pointer-enabled false || return 1
-    wsi_log INFO 'cursor vector disabled'
+    wsi_set_pointer_enabled off
 }
 
 # Side-effect-free probes for the master's detection contract.
