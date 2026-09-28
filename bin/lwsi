@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Control the installed pointer live: lwsi ptr [on|off|status|1..1000].
+# With no arguments, show the current enabled state and maximum pixel length.
+set -euo pipefail
+command_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+library_dir="$command_dir/../lib/linux-window-selection-indicator"
+if [[ -f "$command_dir/../lib/pointer_settings.sh" ]]; then
+    library_dir="$command_dir/../lib"
+fi
+source "$library_dir/logging.sh"
+source "$library_dir/pointer_settings.sh"
+WSI_TARGET_DIR="$HOME/.local/share/gnome-shell/extensions/window-selection-indicator@local"
+WSI_SCHEMA="org.gnome.shell.extensions.window-selection-indicator"
+wsi_pointer_command "$@"

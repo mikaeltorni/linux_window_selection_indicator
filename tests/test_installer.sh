@@ -72,3 +72,20 @@ env WSI_TEST_HOME="$sandbox/fresh" XDG_CONFIG_HOME="$sandbox/fresh-config" \
 [[ "$(env XDG_CONFIG_HOME="$sandbox/fresh-config" \
     GSETTINGS_SCHEMA_DIR="$sandbox/fresh/.local/share/gnome-shell/extensions/window-selection-indicator@local/schemas" \
     gsettings get org.gnome.shell.extensions.window-selection-indicator pointer-max-length)" == 65 ]]
+command="$HOME/.local/bin/lwsi"
+[[ -x "$command" ]]
+"$command" ptr 95 >/dev/null
+[[ "$("$command" ptr)" == 'ptr on 95px' ]]
+"$command" ptr off >/dev/null
+[[ "$("$command")" == 'ptr off 95px' ]]
+"$command" ptr on >/dev/null
+[[ "$("$command" ptr status)" == 'ptr on 95px' ]]
+"$command" --help | rg -q 'lwsi ptr'
+for args in '95 px' nope 0 1001; do
+    if "$command" ptr "$args" >/dev/null 2>&1; then exit 1; fi
+done
+if "$command" ptr 95 extra >/dev/null 2>&1; then exit 1; fi
+[[ "$("$command" ptr status)" == 'ptr on 95px' ]]
+for file in logging.sh pointer_settings.sh; do
+    cmp "$root/lib/$file" "$HOME/.local/lib/linux-window-selection-indicator/$file"
+done

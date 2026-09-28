@@ -17,8 +17,7 @@ wsi_validate_pointer_env() {
 wsi_set_pointer_enabled() {
     local enabled=false
     [[ "$1" == on ]] && enabled=true
-    run_as_target env GSETTINGS_SCHEMA_DIR="${WSI_SETTINGS_DIR:-$WSI_TARGET_DIR/schemas}" \
-        gsettings set "$WSI_SCHEMA" pointer-enabled "$enabled" || return 1
+    wsi_pointer_gsettings set pointer-enabled "$enabled" || return 1
     wsi_log INFO "cursor vector $1"
 }
 
@@ -34,7 +33,58 @@ wsi_validate_pointer_length() {
 wsi_set_pointer_length() {
     wsi_validate_pointer_length "$1" || return $?
     local length=$((10#$1))
-    run_as_target env GSETTINGS_SCHEMA_DIR="${WSI_SETTINGS_DIR:-$WSI_TARGET_DIR/schemas}" \
-        gsettings set "$WSI_SCHEMA" pointer-max-length "$length" || return 1
+    wsi_pointer_gsettings set pointer-max-length "$length" || return 1
     wsi_log INFO "cursor vector maximum length ${length}px"
+}
+
+# Shared settings boundary: installer runs as the desktop target; the installed
+# CLI already runs in the user's session. Parameters: operation, key, [value].
+wsi_pointer_gsettings() {
+    local operation="$1"; shift
+    local -a command=(env GSETTINGS_SCHEMA_DIR="${WSI_SETTINGS_DIR:-$WSI_TARGET_DIR/schemas}" \
+        gsettings "$operation" "$WSI_SCHEMA" "$@")
+    if declare -F run_as_target >/dev/null; then
+        run_as_target "${command[@]}"
+    else
+        "${command[@]}"
+    fi
+}
+
+# Public status output stays on stdout; logs and validation errors use stderr.
+wsi_pointer_status() {
+    local enabled length state=off
+    enabled="$(wsi_pointer_gsettings get pointer-enabled)" || return 1
+    length="$(wsi_pointer_gsettings get pointer-max-length)" || return 1
+    [[ "$enabled" == true ]] && state=on
+    printf 'ptr %s %spx\n' "$state" "$length"
+}
+
+# Dispatch lwsi's pointer command through the same setters as the installer.
+# A numeric length also enables the pointer; on/off retain the previous length.
+wsi_pointer_command() {
+    if [[ "${1:-}" == --help || "${1:-}" == -h ]]; then
+        printf 'Usage: lwsi ptr [on|off|status|N]\nN: maximum length in pixels (1–1000); a number also enables the pointer.\n'
+        return 0
+    fi
+    if (( $# > 2 )) || [[ $# -gt 0 && "$1" != ptr ]]; then
+        wsi_log ERROR 'usage: lwsi ptr [on|off|status|N]'
+        return 2
+    fi
+    local action="${2:-status}"
+    case "$action" in
+        on|off|status) ;;
+        *) wsi_validate_pointer_length "$action" || return $? ;;
+    esac
+    if [[ ! -f "$WSI_TARGET_DIR/schemas/gschemas.compiled" ]]; then
+        wsi_log ERROR 'indicator is not installed; run bash install.sh --select outline,ptr'
+        return 1
+    fi
+    case "$action" in
+        on|off) wsi_set_pointer_enabled "$action" || return 1 ;;
+        status) ;;
+        *)
+            wsi_set_pointer_length "$action" || return 1
+            wsi_set_pointer_enabled on || return 1 ;;
+    esac
+    wsi_pointer_status
 }
