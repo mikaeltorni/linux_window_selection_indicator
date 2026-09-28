@@ -17,8 +17,13 @@ the farthest reachable monitor pixel gives the full length. Monitor positions,
 resolutions, and window moves/resizes are included automatically; empty gaps in
 staggered monitor layouts do not count. The line never intercepts clicks.
 
-The pointer samples the latest cursor position immediately before the compositor
-paints each frame, in addition to its motion polling, reducing stale-position lag.
+The pointer polls every 4ms (250 samples per second) at high priority and samples
+again immediately before the compositor paints. Visible updates follow each
+monitor's refresh rate, including 120Hz displays. Window/monitor geometry is
+cached until it changes; a reusable thin line texture moves, rotates and scales
+on the GPU without repainting or resizing its drawing surface on every motion.
+Stationary samples skip geometry and drawing updates, and disabling `ptr`
+removes both tracking callbacks.
 
 ## Install
 

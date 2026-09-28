@@ -9,6 +9,8 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const BORDER_PX = 4;
 const BORDER_COLOR = 'rgba(0, 255, 230, 0.6)';
+const POINTER_POLL_MS = 4;
+const POINTER_PADDING = 2;
 
 /** Return true for a visible application window eligible for the indicator. */
 function isApplicationWindow(window) {
@@ -32,6 +34,7 @@ export default class WindowSelectionIndicator extends Extension {
             () => this._syncFocus());
         this._workspaceSignal = global.workspace_manager.connect('active-workspace-changed',
             () => this._syncFocus());
+        this._monitorSignal = Main.layoutManager.connect('monitors-changed', () => this._place());
         this._overviewShowing = Main.overview.connect('showing', () => this._hide());
         this._overviewHidden = Main.overview.connect('hidden', () => this._syncFocus());
         this._pointer = new St.DrawingArea({ reactive: false, visible: false });
@@ -57,6 +60,8 @@ export default class WindowSelectionIndicator extends Extension {
     }
 
     _hide() {
+        this._pointerFrame = null;
+        this._pointerLastX = NaN;
         this._outline.hide();
         this._pointer.hide();
     }
@@ -98,6 +103,11 @@ export default class WindowSelectionIndicator extends Extension {
         const windowActor = window.get_compositor_private();
         global.window_group.set_child_above_sibling(this._outline, windowActor);
         this._outline.show();
+        // Window and layout signals own these values. Cursor samples should
+        // only query the pointer, not repeatedly call Meta or scan monitors.
+        this._pointerFrame = frame;
+        this._pointerMaxDistance = maximumPointerDistance(frame, Main.layoutManager.monitors);
+        this._pointerLastX = NaN;
         this._updatePointer();
     }
 
@@ -105,6 +115,14 @@ export default class WindowSelectionIndicator extends Extension {
     _syncPointerSettings() {
         this._pointerEnabled = this._settings.get_boolean('pointer-enabled');
         this._pointerMaxLength = this._settings.get_int('pointer-max-length');
+        // Draw one horizontal texture and transform it on the GPU as the
+        // cursor moves; only a length setting change needs a Cairo repaint.
+        this._pointer.set_size(this._pointerMaxLength + 2 * POINTER_PADDING,
+            2 * POINTER_PADDING);
+        this._pointer.set_pivot_point(POINTER_PADDING /
+            (this._pointerMaxLength + 2 * POINTER_PADDING), 0.5);
+        this._pointer.queue_repaint();
+        this._pointerLastX = NaN;
         this._stopPointerTracking();
         if (this._pointerEnabled) {
             // Refresh again before the compositor draws: timer samples may be
@@ -114,13 +132,13 @@ export default class WindowSelectionIndicator extends Extension {
                     this._updatePointer();
                     return GLib.SOURCE_CONTINUE;
                 });
-            this._pointerTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 16, () => {
+            this._pointerTimer = GLib.timeout_add(GLib.PRIORITY_HIGH, POINTER_POLL_MS, () => {
                 this._updatePointer();
                 return GLib.SOURCE_CONTINUE;
             });
         }
         this._updatePointer();
-        wsiLog('info', `cursor vector ${this._pointerEnabled ? 'enabled' : 'disabled'}, max ${this._pointerMaxLength}px`);
+        wsiLog('info', `cursor vector ${this._pointerEnabled ? 'enabled' : 'disabled'}, max ${this._pointerMaxLength}px, ${POINTER_POLL_MS}ms samples with pre-paint refresh`);
     }
 
     /** Release both callbacks so disabling the optional vector leaves no work. */
@@ -135,51 +153,40 @@ export default class WindowSelectionIndicator extends Extension {
         }
     }
 
-    /** Track the pointer only for a visible focused window on this workspace. */
+    /** Sample at high priority and pre-paint; reuse all stationary geometry. */
     _updatePointer() {
-        const window = this._focusWindow;
-        if (!this._pointerEnabled || !isApplicationWindow(window) || Main.overview.visible ||
-            !window.located_on_workspace(global.workspace_manager.get_active_workspace())) {
-            this._pointer.hide();
-            return;
-        }
-        const frame = window.get_frame_rect();
-        if (frame.width <= 0 || frame.height <= 0) {
+        if (!this._pointerEnabled || !this._pointerFrame) {
             this._pointer.hide();
             return;
         }
         const [x, y] = global.get_pointer();
-        const vector = pointerVector(frame, x, y, this._pointerMaxLength,
-            maximumPointerDistance(frame, Main.layoutManager.monitors));
+        if (x === this._pointerLastX && y === this._pointerLastY)
+            return;
+        this._pointerLastX = x;
+        this._pointerLastY = y;
+        const vector = pointerVector(this._pointerFrame, x, y, this._pointerMaxLength,
+            this._pointerMaxDistance);
+        this._vector = vector;
         if (vector.length === 0) {
             this._pointer.hide();
             return;
         }
-        const key = `${x},${y},${vector.dx},${vector.dy}`;
-        if (this._pointer.visible && key === this._pointerKey)
-            return;
-        this._pointerKey = key;
-        this._vector = vector;
-        const left = Math.floor(Math.min(x, x + vector.dx)) - 2;
-        const top = Math.floor(Math.min(y, y + vector.dy)) - 2;
-        this._pointer.set_position(left, top);
-        this._pointer.set_size(Math.ceil(Math.abs(vector.dx)) + 4,
-            Math.ceil(Math.abs(vector.dy)) + 4);
-        this._pointer.queue_repaint();
+        // Pivot is the texture's line start, so rotation and scaling keep the
+        // origin exactly on the cursor without allocating another surface.
+        this._pointer.set_position(x - POINTER_PADDING, y - POINTER_PADDING);
+        this._pointer.rotation_angle_z = Math.atan2(vector.dy, vector.dx) * 180 / Math.PI;
+        this._pointer.set_scale(vector.length / this._pointerMaxLength, 1);
         this._pointer.show();
     }
 
-    /** Paint a thin teal line without a hitbox or per-frame journal output. */
+    /** Paint a reusable two-pixel horizontal stroke; motion changes transforms. */
     _paintPointer() {
         const cr = this._pointer.get_context();
         try {
-            if (!this._vector)
-                return;
-            const { x, y, dx, dy } = this._vector;
             cr.setSourceRGBA(0, 1, 230 / 255, 0.6);
             cr.setLineWidth(2);
-            cr.moveTo(x - this._pointer.x, y - this._pointer.y);
-            cr.lineTo(x + dx - this._pointer.x, y + dy - this._pointer.y);
+            cr.moveTo(POINTER_PADDING, POINTER_PADDING);
+            cr.lineTo(POINTER_PADDING + this._pointerMaxLength, POINTER_PADDING);
             cr.stroke();
         } finally {
             cr.$dispose();
@@ -194,6 +201,7 @@ export default class WindowSelectionIndicator extends Extension {
         this._disconnectWindow();
         global.display.disconnect(this._displaySignal);
         global.workspace_manager.disconnect(this._workspaceSignal);
+        Main.layoutManager.disconnect(this._monitorSignal);
         Main.overview.disconnect(this._overviewShowing);
         Main.overview.disconnect(this._overviewHidden);
         this._outline.destroy();

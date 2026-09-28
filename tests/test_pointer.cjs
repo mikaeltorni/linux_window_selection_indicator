@@ -6,24 +6,26 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 let pointerEnabled = true, pointerMaxLength = 100, settingsCallback;
 const settings = { get_boolean: () => pointerEnabled, get_int: () => pointerMaxLength, connect(_name, callback) { settingsCallback = callback; return 1; }, disconnect() {} };
-let pointer = [20, 50], activeWorkspace = {}, timer, beforePaint;
+let pointer = [20, 50], activeWorkspace = {}, timer, beforePaint, pollInterval, pollPriority, frameReads = 0;
 const actors = [];
 class Actor {
     constructor(props) { Object.assign(this, props); actors.push(this); }
     connect(name, callback) { this[name] = callback; return 1; }
     set_position(x, y) { this.x = x; this.y = y; }
-    set_size(width, height) { this.width = width; this.height = height; }
+    set_size(width, height) { this.width = width; this.height = height; this.resizes = (this.resizes || 0) + 1; }
+    set_pivot_point(x, y) { this.pivot = [x, y]; }
+    set_scale(x, y) { this.scale_x = x; this.scale_y = y; }
     show() { this.visible = true; }
     hide() { this.visible = false; }
     destroy() { this.destroyed = true; }
     queue_repaint() { this.repaints = (this.repaints || 0) + 1; }
 }
-const signals = { connect() { return 1; }, disconnect() {} };
+const signals = { connect(name, callback) { this[name] = callback; return 1; }, disconnect() {} };
 const window = {
     ...signals, is_skip_taskbar: () => false, minimized: false,
     get_compositor_private: () => ({}),
     located_on_workspace: ws => ws === activeWorkspace,
-    get_frame_rect: () => ({ x: 100, y: 100, width: 200, height: 200 }),
+    get_frame_rect: () => { frameReads++; return { x: 100, y: 100, width: 200, height: 200 }; },
 };
 const shell = {
     display: { ...signals, focus_window: window },
@@ -32,7 +34,7 @@ const shell = {
     get_pointer: () => pointer,
 };
 const main = { overview: { ...signals, visible: false }, uiGroup: { add_child() {} },
-    layoutManager: { monitors: [{ x: 100, y: 100, width: 1001, height: 201 }] } };
+    layoutManager: { ...signals, monitors: [{ x: 100, y: 100, width: 1001, height: 201 }] } };
 const context = vm.createContext({
     St: { Widget: Actor, DrawingArea: Actor }, Extension: class { getSettings() { return settings; } },
     Main: main, global: shell, wsiLog() {},
@@ -41,8 +43,8 @@ const context = vm.createContext({
             assert.equal(flags, 1); beforePaint = callback; return 43;
         },
         threads_remove_repaint_func(id) { assert.equal(id, 43); beforePaint = null; } },
-    GLib: { PRIORITY_DEFAULT: 0, SOURCE_CONTINUE: true,
-        timeout_add(_priority, _interval, callback) { timer = callback; return 42; },
+    GLib: { PRIORITY_DEFAULT: 0, PRIORITY_HIGH: -100, SOURCE_CONTINUE: true,
+        timeout_add(priority, interval, callback) { pollPriority = priority; pollInterval = interval; timer = callback; return 42; },
         Source: { remove(id) { assert.equal(id, 42); timer = null; } } },
 });
 vm.runInContext(fs.readFileSync(path.join(root, 'window-selection-indicator@local/geometry.js'), 'utf8').replaceAll('export function', 'function'), context);
@@ -96,6 +98,9 @@ const source = fs.readFileSync(path.join(root, 'window-selection-indicator@local
     .replace(/^import .*;$/gm, '')
     .replace('export default class', 'globalThis.Indicator = class');
 vm.runInContext(source, context);
+let normalizationCalls = 0;
+const calculateMaximum = context.maximumPointerDistance;
+context.maximumPointerDistance = (...args) => { normalizationCalls++; return calculateMaximum(...args); };
 const extension = new context.Indicator();
 extension.enable();
 assert.ok(extension._pointer, 'pointer actor created');
@@ -103,20 +108,34 @@ assert.equal(extension._pointer.reactive, false, 'line does not intercept mouse'
 assert.equal(extension._pointer.visible, true);
 assert.equal(typeof timer, 'function');
 assert.equal(typeof beforePaint, 'function');
+assert.equal(pollInterval, 4, '250Hz cursor sampling');
+assert.equal(pollPriority, -100, 'sample ahead of ordinary GLib tasks');
 pointer = [700, 200]; beforePaint();
 assert.equal(extension._vector.x, 700, 'sample the latest cursor immediately before rendering');
+assert.equal(extension._pointer.x + 2, 700, 'texture pivot stays on cursor hotspot');
+assert.equal(extension._pointer.rotation_angle_z, 180);
+assert.equal(extension._pointer.scale_x, 0.5);
+const readsBeforeMotion = frameReads, normalizationsBeforeMotion = normalizationCalls;
+const repaintsBeforeMotion = extension._pointer.repaints, resizesBeforeMotion = extension._pointer.resizes;
+for (let x = 699; x >= 650; x--) { pointer = [x, 200]; timer(); beforePaint(); }
+for (let count = 0; count < 1000; count++) timer();
+assert.equal(frameReads, readsBeforeMotion, 'cursor tracking reuses window geometry');
+assert.equal(normalizationCalls, normalizationsBeforeMotion, 'cursor tracking reuses monitor normalization');
+assert.equal(extension._pointer.repaints, repaintsBeforeMotion, 'moving cursor uses GPU transforms without Cairo repaint');
+assert.equal(extension._pointer.resizes, resizesBeforeMotion, 'moving cursor does not reallocate its drawing surface');
 pointer = [150, 150]; timer();
 assert.equal(extension._pointer.visible, false, 'inside the window');
 pointer = [400, 200]; timer();
 assert.equal(extension._pointer.visible, true);
-window.located_on_workspace = () => false; timer();
+window.located_on_workspace = () => false; window['workspace-changed'](); timer();
 assert.equal(extension._pointer.visible, false, 'other workspace');
-window.located_on_workspace = () => true;
-main.overview.visible = true; timer();
+window.located_on_workspace = () => true; window['workspace-changed']();
+main.overview.visible = true; main.overview.showing(); timer();
 assert.equal(extension._pointer.visible, false, 'overview');
-main.overview.visible = false; window.minimized = true; timer();
+main.overview.visible = false; main.overview.hidden();
+window.minimized = true; window['notify::minimized'](); timer();
 assert.equal(extension._pointer.visible, false, 'minimized');
-window.minimized = false;
+window.minimized = false; window['notify::minimized']();
 shell.display.focus_window = null; extension._syncFocus(); timer();
 assert.equal(extension._pointer.visible, false, 'no selected window');
 pointerEnabled = false; settingsCallback();
@@ -131,15 +150,17 @@ pointerEnabled = true; settingsCallback();
 assert.equal(extension._pointer.visible, true, 'live opt-in');
 pointerMaxLength = 95; settingsCallback();
 assert.equal(extension._vector.length, 11.875, 'length changes live with desktop distance');
+assert.deepEqual(extension._pointer.pivot, [2 / 99, 0.5], 'length changes preserve the cursor pivot');
+assert.equal(extension._pointer.height, 4, 'drawing surface stays four pixels high');
 main.layoutManager.monitors = [{ x: 100, y: 100, width: 2001, height: 201 }];
-timer();
+main.layoutManager['monitors-changed'](); timer();
 assert.ok(Math.abs(extension._vector.length - 95 * 100 / 1800) < 1e-8,
     'monitor changes update the proportional scale while the pointer is stationary');
 window.get_frame_rect = () => ({ x: 100, y: 100, width: 100, height: 200 });
-timer();
+window['size-changed'](); timer();
 assert.ok(Math.abs(extension._vector.length - 95 * 200 / 1900) < 1e-8,
     'window resize updates both distance and normalization');
-main.layoutManager.monitors = [];
+main.layoutManager.monitors = []; main.layoutManager['monitors-changed']();
 timer();
 assert.equal(extension._pointer.visible, false, 'no available monitor pixels');
 extension.disable();
