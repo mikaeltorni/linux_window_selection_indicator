@@ -40,6 +40,13 @@ const context = vm.createContext({
         Source: { remove(id) { assert.equal(id, 42); timer = null; } } },
 });
 vm.runInContext(fs.readFileSync(path.join(root, 'window-selection-indicator@local/geometry.js'), 'utf8').replace('export function', 'function'), context);
+const frame = { x: 100, y: 100, width: 200, height: 200 };
+for (const [x, y, expected] of [[400, 200, 100], [1000, 200, 100],
+    [350, 200, 50], [150, 150, 0], [100, 100, 0], [-400, -400, 100]]) {
+    const vector = context.pointerVector(frame, x, y);
+    assert.ok(Math.abs(vector.length - expected) < 1e-8);
+    assert.ok(Math.abs(Math.hypot(vector.dx, vector.dy) - expected) < 1e-8);
+}
 const source = fs.readFileSync(path.join(root, 'window-selection-indicator@local/extension.js'), 'utf8')
     .replace(/^import .*;$/gm, '')
     .replace('export default class', 'globalThis.Indicator = class');

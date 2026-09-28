@@ -9,7 +9,8 @@ The extension does not inspect agent processes, statuses, or terminal classes.
 The optional `ptr` component draws a thin teal line from the cursor hotspot toward the
 nearest edge of the focused window, only on the active workspace. It disappears
 when the cursor enters the window, focus is absent, or the overview is open.
-The line never intercepts clicks.
+The line grows with distance to the nearest window edge, up to 100px, and
+never intercepts clicks.
 
 ## Install
 
