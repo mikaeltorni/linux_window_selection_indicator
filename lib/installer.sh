@@ -21,6 +21,10 @@ wsi_resolve_target() {
 wsi_install() {
     wsi_log INFO "installing extension into $WSI_TARGET_DIR"
     local file enabled updated uuid="window-selection-indicator@local"
+    run_as_target install -D -m 0755 "$SCRIPT_DIR/bin/lwsi" "$TARGET_HOME/.local/bin/lwsi" || return 1
+    for file in logging.sh pointer_settings.sh; do
+        run_as_target install -D -m 0644 "$SCRIPT_DIR/lib/$file" "$TARGET_HOME/.local/lib/linux-window-selection-indicator/$file" || return 1
+    done
     for file in extension.js geometry.js logging.js metadata.json; do
         run_as_target install -D -m 0644 "$SCRIPT_DIR/$uuid/$file" "$WSI_TARGET_DIR/$file" || return 1
     done

@@ -39,6 +39,24 @@ precedence. The accepted range is 1–1000 logical pixels. Length changes apply
 live and preserve the pointer's on/off setting. `--configure-component ptr`
 opens the same length prompt, including before the first install.
 
+## Live pointer controls
+
+The installer adds `lwsi` to `~/.local/bin`. It controls just the pointer:
+
+```sh
+lwsi ptr 95      # maximum 95px and enable
+lwsi ptr off     # hide the vector, keeping its length and the outline
+lwsi ptr on      # enable at the saved length
+lwsi ptr status  # print e.g. "ptr on 95px"
+lwsi ptr         # same status; plain "lwsi" also shows status
+lwsi --help
+```
+
+These commands apply immediately through the same saved settings as the
+installer. `on` and `off` preserve the maximum length. Invalid lengths or extra
+arguments fail without changing settings. If `~/.local/bin` is absent from your
+shell's PATH, use `~/.local/bin/lwsi` directly.
+
 Agent Command Center can install this component from a sibling checkout. It
 continues to decide agent lifecycle colors and renders those in its own Kitty
 outlines; this repository owns only the focused-window indication.
