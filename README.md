@@ -21,9 +21,10 @@ resolutions, and window moves/resizes are included automatically; empty gaps in
 staggered monitor layouts do not count. The line never intercepts clicks.
 
 The pointer uses the original direct tracking behavior without motion prediction
-or smoothing. Polling targets 288 samples per second (about 3.47ms)
-with monotonic deadlines and 3/4ms timer delays, preventing cumulative rounding
-drift. A delayed callback resumes normally instead of issuing a catch-up burst.
+or smoothing. Polling targets 1000 probes per second with 1ms timer delays
+and monotonic deadlines. This is a best-effort target: other Shell work can
+delay [GLib timer dispatch](https://docs.gtk.org/glib/func.timeout_add.html).
+A delayed callback resumes normally instead of issuing a catch-up burst.
 Polling runs at normal priority so it yields to input processing. A cursor move
 queues a normal compositor redraw; while that frame is pending, redundant polls
 are skipped. The pre-paint callback positions a bounded paint region, then the
@@ -43,7 +44,7 @@ cached until it changes. Stationary input does not force redraws; disabling
 `ptr` removes both tracking callbacks.
 
 Visible updates still depend on compositor/display timing: a 120Hz monitor
-cannot display 288 frames per second just because the tracker targets 288Hz.
+cannot display 1000 frames per second just because the tracker targets 1000Hz.
 The installer preserves display settings. The hardware cursor can still update
 between compositor presentations, so zero separation at every instant is not
 promised. The paint-time sampling follows GNOME's
