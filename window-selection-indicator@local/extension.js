@@ -201,7 +201,7 @@ export default class WindowSelectionIndicator extends Extension {
             const wasVisible = this._pointer.visible;
             this._pointer.hide();
             if (requestFrame && wasVisible)
-                this._requestPointerFrame();
+                this._markPointerFramePending();
             return;
         }
         // Pivot is the texture's line start, so rotation and scaling keep the
@@ -211,19 +211,16 @@ export default class WindowSelectionIndicator extends Extension {
         this._pointer.set_scale(vector.length / this._pointerMaxLength, 1);
         this._pointer.show();
         if (requestFrame)
-            this._requestPointerFrame();
+            this._markPointerFramePending();
     }
 
-    /** Preserve Mutter's presentation deadline so the final sample stays fresh.
-     * Immediate scheduling renders early and lets the hardware cursor advance
-     * while the frame waits for vblank. Include all views when crossing screens.
-     * Never schedule from the pre-paint callback itself.
+    /** Coalesce polling until the actor's queued redraw reaches pre-paint.
+     * Actor changes already schedule the normal presentation deadline. Forcing
+     * an immediate frame renders early and leaves the cursor sample waiting
+     * for vblank. No extra stage-view scheduling is necessary.
      */
-    _requestPointerFrame() {
-        const views = global.stage.peek_stage_views();
-        this._pointerFramePending = views.length > 0;
-        for (const view of views)
-            view.schedule_update();
+    _markPointerFramePending() {
+        this._pointerFramePending = global.stage.peek_stage_views().length > 0;
     }
 
     /** Paint a reusable two-pixel horizontal stroke; motion changes transforms. */
