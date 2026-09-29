@@ -4,6 +4,7 @@ import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import { maximumPointerDistance, pointerVector } from './geometry.js';
 import { wsiLog } from './logging.js';
+import { PointerContent } from './pointerContent.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
@@ -11,7 +12,6 @@ const BORDER_PX = 4;
 const BORDER_COLOR = 'rgba(0, 255, 230, 0.6)';
 const POINTER_SAMPLE_HZ = 144;
 const POINTER_SAMPLE_US = 1000000 / POINTER_SAMPLE_HZ;
-const POINTER_PADDING = 2;
 
 /** Return true for a visible application window eligible for the indicator. */
 function isApplicationWindow(window) {
@@ -38,9 +38,11 @@ export default class WindowSelectionIndicator extends Extension {
         this._monitorSignal = Main.layoutManager.connect('monitors-changed', () => this._place());
         this._overviewShowing = Main.overview.connect('showing', () => this._hide());
         this._overviewHidden = Main.overview.connect('hidden', () => this._syncFocus());
-        this._pointer = new St.DrawingArea({ reactive: false, visible: false });
+        this._pointerContent = new PointerContent();
+        this._pointer = new Clutter.Actor({
+            reactive: false, visible: false, content: this._pointerContent,
+        });
         this._pointer.set_position(0, 0);
-        this._pointer.connect('repaint', () => this._paintPointer());
         Main.uiGroup.add_child(this._pointer);
         this._pointerTimer = 0;
         this._pointerBeforePaint = 0;
@@ -65,6 +67,7 @@ export default class WindowSelectionIndicator extends Extension {
     _hide() {
         this._pointerFramePending = false;
         this._pointerFrame = null;
+        this._pointerContent.frame = null;
         this._pointerLastX = NaN;
         this._outline.hide();
         this._pointer.hide();
@@ -111,6 +114,9 @@ export default class WindowSelectionIndicator extends Extension {
         // only query the pointer, not repeatedly call Meta or scan monitors.
         this._pointerFrame = frame;
         this._pointerMaxDistance = maximumPointerDistance(frame, Main.layoutManager.monitors);
+        this._pointerContent.frame = frame;
+        this._pointerContent.maxDistance = this._pointerMaxDistance;
+        this._pointerContent.invalidate();
         this._pointerLastX = NaN;
         this._pointerFramePending = false;
         this._updatePointer();
@@ -120,13 +126,12 @@ export default class WindowSelectionIndicator extends Extension {
     _syncPointerSettings() {
         this._pointerEnabled = this._settings.get_boolean('pointer-enabled');
         this._pointerMaxLength = this._settings.get_int('pointer-max-length');
-        // Draw one horizontal texture and transform it on the GPU as the
-        // cursor moves; only a length setting change needs a Cairo repaint.
-        this._pointer.set_size(this._pointerMaxLength + 2 * POINTER_PADDING,
-            2 * POINTER_PADDING);
-        this._pointer.set_pivot_point(POINTER_PADDING /
-            (this._pointerMaxLength + 2 * POINTER_PADDING), 0.5);
-        this._pointer.queue_repaint();
+        // Reserve enough damage for input arriving after the pre-paint anchor.
+        // The content texture is constant; length changes only resize the region.
+        this._pointerContent.maxLength = this._pointerMaxLength;
+        const diameter = 2 * this._pointerContent.radius;
+        this._pointer.set_size(diameter, diameter);
+        this._pointerContent.invalidate();
         this._pointerLastX = NaN;
         this._stopPointerTracking();
         if (this._pointerEnabled) {
@@ -142,7 +147,7 @@ export default class WindowSelectionIndicator extends Extension {
             this._queuePointerSample();
         }
         this._updatePointer();
-        wsiLog('info', `cursor vector ${this._pointerEnabled ? 'enabled' : 'disabled'}, max ${this._pointerMaxLength}px, ${POINTER_SAMPLE_HZ}Hz direct tracking with coalesced presentation-aligned frames`);
+        wsiLog('info', `cursor vector ${this._pointerEnabled ? 'enabled' : 'disabled'}, max ${this._pointerMaxLength}px, ${POINTER_SAMPLE_HZ}Hz direct tracking with late paint-time sampling`);
     }
 
     /** Schedule the next 144Hz probe without accumulating millisecond drift.
@@ -204,11 +209,12 @@ export default class WindowSelectionIndicator extends Extension {
                 this._markPointerFramePending();
             return;
         }
-        // Pivot is the texture's line start, so rotation and scaling keep the
-        // origin exactly on the cursor without allocating another surface.
-        this._pointer.set_translation(x - POINTER_PADDING, y - POINTER_PADDING, 0);
-        this._pointer.rotation_angle_z = Math.atan2(vector.dy, vector.dx) * 180 / Math.PI;
-        this._pointer.set_scale(vector.length / this._pointerMaxLength, 1);
+        // This anchor owns allocation/damage. Content samples the actual cursor
+        // again at paint and shifts the stroke inside this reserved region.
+        this._pointerContent.anchorX = x;
+        this._pointerContent.anchorY = y;
+        const radius = this._pointerContent.radius;
+        this._pointer.set_translation(x - radius, y - radius, 0);
         this._pointer.show();
         if (requestFrame)
             this._markPointerFramePending();
@@ -223,24 +229,11 @@ export default class WindowSelectionIndicator extends Extension {
         this._pointerFramePending = global.stage.peek_stage_views().length > 0;
     }
 
-    /** Paint a reusable two-pixel horizontal stroke; motion changes transforms. */
-    _paintPointer() {
-        const cr = this._pointer.get_context();
-        try {
-            cr.setSourceRGBA(0, 1, 230 / 255, 0.6);
-            cr.setLineWidth(2);
-            cr.moveTo(POINTER_PADDING, POINTER_PADDING);
-            cr.lineTo(POINTER_PADDING + this._pointerMaxLength, POINTER_PADDING);
-            cr.stroke();
-        } finally {
-            cr.$dispose();
-        }
-    }
-
     disable() {
         this._settings.disconnect(this._settingsSignal);
         this._stopPointerTracking();
         this._pointer.destroy();
+        this._pointerContent = null;
         this._settings = null;
         this._disconnectWindow();
         global.display.disconnect(this._displaySignal);

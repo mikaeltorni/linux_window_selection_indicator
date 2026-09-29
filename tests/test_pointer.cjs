@@ -46,7 +46,11 @@ const main = { overview: { ...signals, visible: false }, uiGroup: { add_child() 
 const context = vm.createContext({
     St: { Widget: Actor, DrawingArea: Actor }, Extension: class { getSettings() { return settings; } },
     Main: main, global: shell, wsiLog() {},
-    Clutter: { RepaintFlags: { PRE_PAINT: 1 },
+    PointerContent: class {
+        get radius() { return this.maxLength + 66; }
+        invalidate() {}
+    },
+    Clutter: { Actor, RepaintFlags: { PRE_PAINT: 1 },
         threads_add_repaint_func_full(flags, callback) {
             assert.equal(flags, 1); beforePaint = callback; return 43;
         },
@@ -152,12 +156,13 @@ timer();
 assert.ok(pollInterval >= 6 && pollInterval <= 7, 'stalls resume without a catch-up burst');
 pointer = [700, 200]; beforePaint();
 assert.equal(extension._vector.x, 700, 'sample the latest cursor immediately before rendering');
-assert.equal(extension._pointer.translation_x + 2, 700, 'texture pivot stays on cursor hotspot');
-assert.equal(extension._pointer.rotation_angle_z, 180);
-assert.ok(Math.abs(extension._pointer.scale_x - Math.sqrt(0.5)) < 1e-8);
+assert.equal(extension._pointer.translation_x + extension._pointerContent.radius, 700,
+    'reserved paint region is anchored on the cursor');
+assert.equal(extension._pointerContent.anchorX, 700);
+assert.equal(extension._pointerContent.frame.x, frame.x);
 const readsBeforeMotion = frameReads, normalizationsBeforeMotion = normalizationCalls;
 const positionsBeforeMotion = extension._pointer.positions;
-const repaintsBeforeMotion = extension._pointer.repaints, resizesBeforeMotion = extension._pointer.resizes;
+const resizesBeforeMotion = extension._pointer.resizes;
 const movesBeforeMotion = extension._pointer.moves;
 pointer = [699, 200]; timer();
 assert.equal(extension._pointer.moves, movesBeforeMotion + 1, 'motion queues its redraw through the actor');
@@ -179,7 +184,6 @@ timer(); beforePaint();
 assert.equal(extension._pointer.moves, movesAfterPause, 'stationary cursor does not force compositor frames');
 assert.equal(frameReads, readsBeforeMotion, 'cursor tracking reuses window geometry');
 assert.equal(normalizationCalls, normalizationsBeforeMotion, 'cursor tracking reuses monitor normalization');
-assert.equal(extension._pointer.repaints, repaintsBeforeMotion, 'moving cursor uses GPU transforms without Cairo repaint');
 assert.equal(extension._pointer.resizes, resizesBeforeMotion, 'moving cursor does not reallocate its drawing surface');
 assert.equal(extension._pointer.positions, positionsBeforeMotion, 'moving cursor does not relayout the actor');
 pointer = [150, 150]; timer(); beforePaint();
@@ -211,8 +215,8 @@ assert.equal(extension._pointer.visible, true, 'live opt-in');
 pointerMaxLength = 95; settingsCallback();
 assert.ok(Math.abs(extension._vector.length - 95 * Math.sqrt(100 / 800)) < 1e-8,
     'length changes live with desktop distance');
-assert.deepEqual(extension._pointer.pivot, [2 / 99, 0.5], 'length changes preserve the cursor pivot');
-assert.equal(extension._pointer.height, 4, 'drawing surface stays four pixels high');
+assert.equal(extension._pointerContent.maxLength, 95, 'content receives live length changes');
+assert.equal(extension._pointer.height, 2 * (95 + 66), 'reserved region includes the late motion margin');
 const originalViews = shell.stage.peek_stage_views;
 shell.stage.peek_stage_views = () => [];
 beforePaint(); pointer = [401, 200]; timer();

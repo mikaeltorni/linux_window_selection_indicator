@@ -25,7 +25,7 @@ wsi_install() {
     for file in logging.sh pointer_settings.sh; do
         run_as_target install -D -m 0644 "$SCRIPT_DIR/lib/$file" "$TARGET_HOME/.local/lib/linux-window-selection-indicator/$file" || return 1
     done
-    for file in extension.js geometry.js logging.js metadata.json; do
+    for file in extension.js geometry.js pointerContent.js logging.js metadata.json; do
         run_as_target install -D -m 0644 "$SCRIPT_DIR/$uuid/$file" "$WSI_TARGET_DIR/$file" || return 1
     done
     run_as_target install -D -m 0644 "$SCRIPT_DIR/$uuid/schemas/$WSI_SCHEMA.gschema.xml" "$WSI_TARGET_DIR/schemas/$WSI_SCHEMA.gschema.xml" || return 1
