@@ -43,7 +43,9 @@ removes both tracking callbacks.
 
 Run `bash install.sh` from this checkout for the component menu (or defaults
 without a terminal). The outline is default-on; the cursor vector is default-off.
-Use `bash install.sh --select outline,ptr` to install both. Use
+Use `bash install.sh --select outline,ptr` to install both. The master setup's
+`installation_configs/default.json` preset selects the outline and leaves the pointer
+vector off; `installation_configs/empty.json` selects no components. Use
 `bash install.sh --uninstall ptr` to disable only the vector. `--default`, `--all`,
 `--list-components`, `--detect`, and `--reconfigure ptr` use the shared framework.
 
