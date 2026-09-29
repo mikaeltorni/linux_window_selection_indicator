@@ -26,7 +26,7 @@ bash "$root/install.sh" --select outline,ptr >/dev/null
 bash "$root/install.sh" --default >/dev/null
 [[ "$(gsettings get org.gnome.shell.extensions.window-selection-indicator pointer-enabled)" == true ]]
 bash "$root/install.sh" --uninstall ptr >/dev/null
-for file in extension.js geometry.js logging.js metadata.json; do
+for file in extension.js geometry.js pointerContent.js logging.js metadata.json; do
     cmp "$root/window-selection-indicator@local/$file" \
         "$HOME/.local/share/gnome-shell/extensions/window-selection-indicator@local/$file"
 done

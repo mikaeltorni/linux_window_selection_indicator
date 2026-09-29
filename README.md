@@ -25,19 +25,30 @@ or smoothing. Polling targets 144 samples per second (about 6.94ms)
 with monotonic deadlines and 6/7ms timer delays, preventing cumulative rounding
 drift. A delayed callback resumes normally instead of issuing a catch-up burst.
 Polling runs at normal priority so it yields to input processing. A cursor move
-requests a compositor update at Mutter's normal presentation deadline; it does
-not force early rendering that leaves the sampled cursor position waiting for
-vblank. While that frame is pending, redundant polls are skipped. Clutter's
-pre-paint callback samples the newest cursor position for that frame and never requests another frame itself. Stationary input does
-not force redraws. This reduces synchronous X11 cursor queries and avoids
-building a backlog of motion updates. Visible updates still
-depend on compositor/display timing: a 120Hz monitor cannot display 144 frames
-per second just because the tracker targets 144Hz. The installer preserves
-display settings. Window/monitor geometry is
-cached until it changes; a reusable thin line texture moves, rotates and scales
-on the GPU without repainting or resizing its drawing surface on every motion.
-Stationary samples skip geometry and drawing updates, and disabling `ptr`
-removes both tracking callbacks.
+queues a normal compositor redraw; while that frame is pending, redundant polls
+are skipped. The pre-paint callback positions a bounded paint region, then the
+vector's own `Clutter.Content` callback samples the actual cursor again when its
+paint nodes are built, after layout and frame preparation. This removes the
+extra stale-input interval between the global pre-paint sample and drawing the
+line. It leaves the hardware cursor unchanged and uses no prediction or smoothing.
+
+The region includes a 64px margin for input arriving during frame preparation.
+A sudden warp beyond that margin omits the stroke for the current frame; the
+next tracking tick moves the region and redraws it safely. The line is never
+painted outside the area the compositor has reserved for this frame. A single
+1×4 texture supplies the two-pixel stroke, and GPU paint nodes place and rotate
+it without Cairo repainting or per-motion allocation changes. The region resizes
+only when the configured maximum length changes. Window/monitor geometry stays
+cached until it changes. Stationary input does not force redraws; disabling
+`ptr` removes both tracking callbacks.
+
+Visible updates still depend on compositor/display timing: a 120Hz monitor
+cannot display 144 frames per second just because the tracker targets 144Hz.
+The installer preserves display settings. The hardware cursor can still update
+between compositor presentations, so zero separation at every instant is not
+promised. The paint-time sampling follows GNOME's
+[content rendering interface](https://raw.githubusercontent.com/GNOME/gnome-shell/gnome-46/js/ui/magnifier.js)
+and the [Mutter frame sequence](https://raw.githubusercontent.com/GNOME/mutter/gnome-46/clutter/clutter/clutter-stage-view.c).
 
 ## Install
 
@@ -103,6 +114,7 @@ From the project checkout, run:
 
 ```sh
 node tests/test_pointer.cjs
+node tests/test_pointer_paint.cjs
 bash tests/test_installer.sh
 bash tests/test_extension_contract.sh
 ```
