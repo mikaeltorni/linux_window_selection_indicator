@@ -9,11 +9,14 @@ The extension does not inspect agent processes, statuses, or terminal classes.
 The optional `ptr` component draws a thin teal line from the cursor hotspot
 toward the nearest edge of the focused window, only on the active workspace. It disappears
 when the cursor enters the window, focus is absent, or the overview is open.
-The line shortens proportionally as the cursor approaches the nearest window
-edge. Its length is the configured maximum (100px by default) multiplied by
-its current distance divided by the farthest possible distance from this window
-across every connected monitor. Half that distance gives half the line length;
-the farthest reachable monitor pixel gives the full length. Monitor positions,
+The line shortens smoothly as the cursor approaches the nearest window edge.
+Its length is the lesser of the actual window distance and the configured maximum
+(100px by default) multiplied by the square root of the current distance divided
+by the farthest possible distance from this window across every connected monitor.
+This curve keeps the stroke visible past the cursor graphic during an approach;
+a strictly linear scale made the line disappear under the cursor well before it
+reached the window. The farthest reachable monitor pixel gives the full configured
+length, and the line reaches zero at the window edge. Monitor positions,
 resolutions, and window moves/resizes are included automatically; empty gaps in
 staggered monitor layouts do not count. The line never intercepts clicks.
 

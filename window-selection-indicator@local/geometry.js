@@ -26,14 +26,15 @@ export function maximumPointerDistance(frame, monitors) {
     return maximum;
 }
 
-/** Return a cursor-to-frame vector scaled by distance / maxDistance.
- * maxLength is its configured visible maximum; maxDistance is in stage pixels.
- * Omitting maxDistance retains the original helper's distance cap for callers.
+/** Return a cursor-to-frame vector with a square-root distance curve.
+ * maxLength is the visible maximum at maxDistance stage pixels. The curve
+ * keeps short approaches visible beyond the cursor graphic, yet reaches zero
+ * at the frame; never extend the stroke past the nearest window edge.
  */
 export function pointerVector(frame, x, y, maxLength = 100, maxDistance = maxLength) {
     const { dx, dy, distance } = frameVector(frame, x, y);
     const ratio = maxDistance > 0 ? Math.min(distance / maxDistance, 1) : 0;
-    const length = Math.min(distance, maxLength * ratio);
+    const length = Math.min(distance, maxLength * Math.sqrt(ratio));
     const scale = distance > 0 ? length / distance : 0;
     return { x, y, dx: dx * scale, dy: dy * scale, length };
 }

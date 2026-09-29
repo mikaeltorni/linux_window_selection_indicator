@@ -69,17 +69,31 @@ for (const [x, y, expected] of [[400, 200, 100], [1000, 200, 100],
 assert.equal(context.pointerVector(frame, 1000, 200, 95).length, 95);
 assert.equal(context.pointerVector(frame, 320, 200, 95).length, 20);
 // Regression: shorten over the entire desktop, not just the last 100 pixels.
-assert.equal(context.pointerVector(frame, 500, 200, 100, 500).length, 40);
-assert.equal(context.pointerVector(frame, 400, 200, 100, 500).length, 20);
-assert.equal(context.pointerVector(frame, 350, 200, 100, 500).length, 10);
+for (const [x, distance] of [[500, 200], [400, 100], [350, 50]]) {
+    const vector = context.pointerVector(frame, x, 200, 100, 500);
+    assert.ok(Math.abs(vector.length - 100 * Math.sqrt(distance / 500)) < 1e-8);
+}
 // Full length only at the farthest reachable monitor pixel from this window.
 const monitors = main.layoutManager.monitors;
 const farthest = context.maximumPointerDistance(frame, monitors);
 assert.equal(farthest, 800);
-for (const [x, expected] of [[1100, 100], [700, 50], [500, 25], [301, 0.125], [200, 0]]) {
+for (const [x, distance] of [[1100, 800], [700, 400], [500, 200], [301, 1], [200, 0]]) {
     const vector = context.pointerVector(frame, x, 200, 100, farthest);
-    assert.equal(vector.length, expected);
+    const expected = Math.min(distance, 100 * Math.sqrt(distance / farthest));
+    assert.ok(Math.abs(vector.length - expected) < 1e-8);
 }
+// On a three-monitor desktop the former linear stroke disappeared beneath the ~28px
+// cursor graphic during a horizontal approach, even with the cursor stationary.
+const approachFrame = { x: 1934, y: 2246, width: 1920, height: 2075 };
+const approachMonitors = [
+    { x: 0, y: 2160, width: 3840, height: 2160 },
+    { x: 0, y: 0, width: 3840, height: 2160 },
+    { x: 3840, y: 1380, width: 2160, height: 3840 },
+];
+const approachMaximum = context.maximumPointerDistance(approachFrame, approachMonitors);
+const approach = context.pointerVector(approachFrame, 1500, 3000, 100, approachMaximum);
+assert.ok(approach.length > 28, 'approach stroke extends past the cursor graphic');
+assert.equal(context.pointerVector(approachFrame, 1934, 3000, 100, approachMaximum).length, 0);
 const leftMonitor = { x: -900, y: -700, width: 501, height: 601 };
 assert.equal(context.maximumPointerDistance(frame, [...monitors, leftMonitor]), Math.hypot(1000, 800));
 // A bounding-box corner in a gap between staggered monitors is not a pixel.
@@ -136,7 +150,7 @@ pointer = [700, 200]; beforePaint();
 assert.equal(extension._vector.x, 700, 'sample the latest cursor immediately before rendering');
 assert.equal(extension._pointer.translation_x + 2, 700, 'texture pivot stays on cursor hotspot');
 assert.equal(extension._pointer.rotation_angle_z, 180);
-assert.equal(extension._pointer.scale_x, 0.5);
+assert.ok(Math.abs(extension._pointer.scale_x - Math.sqrt(0.5)) < 1e-8);
 const readsBeforeMotion = frameReads, normalizationsBeforeMotion = normalizationCalls;
 const positionsBeforeMotion = extension._pointer.positions;
 const repaintsBeforeMotion = extension._pointer.repaints, resizesBeforeMotion = extension._pointer.resizes;
@@ -190,7 +204,8 @@ assert.equal(extension._pointer.visible, false);
 pointerEnabled = true; settingsCallback();
 assert.equal(extension._pointer.visible, true, 'live opt-in');
 pointerMaxLength = 95; settingsCallback();
-assert.equal(extension._vector.length, 11.875, 'length changes live with desktop distance');
+assert.ok(Math.abs(extension._vector.length - 95 * Math.sqrt(100 / 800)) < 1e-8,
+    'length changes live with desktop distance');
 assert.deepEqual(extension._pointer.pivot, [2 / 99, 0.5], 'length changes preserve the cursor pivot');
 assert.equal(extension._pointer.height, 4, 'drawing surface stays four pixels high');
 const originalViews = shell.stage.peek_stage_views;
@@ -201,11 +216,11 @@ shell.stage.peek_stage_views = originalViews;
 pointer = [400, 200]; timer(); beforePaint();
 main.layoutManager.monitors = [{ x: 100, y: 100, width: 2001, height: 201 }];
 main.layoutManager['monitors-changed'](); timer();
-assert.ok(Math.abs(extension._vector.length - 95 * 100 / 1800) < 1e-8,
-    'monitor changes update the proportional scale while the pointer is stationary');
+assert.ok(Math.abs(extension._vector.length - 95 * Math.sqrt(100 / 1800)) < 1e-8,
+    'monitor changes update the distance curve while the pointer is stationary');
 window.get_frame_rect = () => ({ x: 100, y: 100, width: 100, height: 200 });
 window['size-changed'](); timer();
-assert.ok(Math.abs(extension._vector.length - 95 * 200 / 1900) < 1e-8,
+assert.ok(Math.abs(extension._vector.length - 95 * Math.sqrt(200 / 1900)) < 1e-8,
     'window resize updates both distance and normalization');
 main.layoutManager.monitors = []; main.layoutManager['monitors-changed']();
 timer();
