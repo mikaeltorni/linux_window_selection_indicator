@@ -9,14 +9,16 @@ const settings = { get_boolean: () => pointerEnabled, get_int: () => pointerMaxL
 let pointer = [20, 50], activeWorkspace = {}, timer, beforePaint, pollInterval, pollPriority, frameReads = 0;
 let sampleTime = 1000000;
 const scheduledDelays = [];
-let pointerQueries = 0, scheduledFrames = 0;
-const view = { schedule_update() { scheduledFrames++; } };
+let pointerQueries = 0;
+// GNOME 46 exposes no normal schedule_update() on StageView. Actor setters
+// already queue redraws; the extension must work without an extra scheduling API.
+const view = {};
 const actors = [];
 class Actor {
     constructor(props) { Object.assign(this, props); actors.push(this); }
     connect(name, callback) { this[name] = callback; return 1; }
     set_position(x, y) { this.x = x; this.y = y; this.positions = (this.positions || 0) + 1; }
-    set_translation(x, y, z) { this.translation_x = x; this.translation_y = y; this.translation_z = z; }
+    set_translation(x, y, z) { this.translation_x = x; this.translation_y = y; this.translation_z = z; this.moves = (this.moves || 0) + 1; }
     set_size(width, height) { this.width = width; this.height = height; this.resizes = (this.resizes || 0) + 1; }
     set_pivot_point(x, y) { this.pivot = [x, y]; }
     set_scale(x, y) { this.scale_x = x; this.scale_y = y; }
@@ -123,7 +125,7 @@ const source = fs.readFileSync(path.join(root, 'window-selection-indicator@local
     .replace(/^import .*;$/gm, '')
     .replace('export default class', 'globalThis.Indicator = class');
 assert.doesNotMatch(source, /PointerMotion|leadUs/, 'restore direct tracking without prediction');
-assert.doesNotMatch(source, /schedule_update_now/,
+assert.doesNotMatch(source, /\.schedule_update/,
     'early rendering discards presentation deadlines and makes the cursor sample stale at vblank');
 vm.runInContext(source, context);
 let normalizationCalls = 0;
@@ -156,24 +158,25 @@ assert.ok(Math.abs(extension._pointer.scale_x - Math.sqrt(0.5)) < 1e-8);
 const readsBeforeMotion = frameReads, normalizationsBeforeMotion = normalizationCalls;
 const positionsBeforeMotion = extension._pointer.positions;
 const repaintsBeforeMotion = extension._pointer.repaints, resizesBeforeMotion = extension._pointer.resizes;
-const framesBeforeMotion = scheduledFrames;
+const movesBeforeMotion = extension._pointer.moves;
 pointer = [699, 200]; timer();
-assert.equal(scheduledFrames, framesBeforeMotion + 1, 'motion preserves the compositor presentation deadline');
+assert.equal(extension._pointer.moves, movesBeforeMotion + 1, 'motion queues its redraw through the actor');
+assert.equal(extension._pointerFramePending, true, 'motion marks the queued redraw pending');
 const queriesWhilePending = pointerQueries;
 pointer = [698, 200]; timer(); timer();
 assert.equal(pointerQueries, queriesWhilePending, 'pending motion frame coalesces redundant X11 probes');
-assert.equal(scheduledFrames, framesBeforeMotion + 1, 'one presentation request per pending frame');
+assert.equal(extension._pointer.moves, movesBeforeMotion + 1, 'pending frame does not repeat transforms');
 beforePaint();
 assert.equal(extension._vector.x, 698, 'pending frame samples newest input before it renders');
-assert.equal(scheduledFrames, framesBeforeMotion + 1, 'paint callback does not schedule another frame');
+assert.equal(extension._pointerFramePending, false, 'pre-paint consumes the pending redraw');
 for (let x = 699; x >= 650; x--) { pointer = [x, 200]; timer(); beforePaint(); }
 assert.equal(extension._vector.x, 650, 'moving vector uses actual cursor coordinates');
 pointer = [660, 200]; timer(); beforePaint();
 assert.equal(extension._vector.x, 660, 'direction reversal follows actual coordinates immediately');
 for (let count = 0; count < 1000; count++) timer();
-const framesAfterPause = scheduledFrames;
+const movesAfterPause = extension._pointer.moves;
 timer(); beforePaint();
-assert.equal(scheduledFrames, framesAfterPause, 'stationary cursor does not force compositor frames');
+assert.equal(extension._pointer.moves, movesAfterPause, 'stationary cursor does not force compositor frames');
 assert.equal(frameReads, readsBeforeMotion, 'cursor tracking reuses window geometry');
 assert.equal(normalizationCalls, normalizationsBeforeMotion, 'cursor tracking reuses monitor normalization');
 assert.equal(extension._pointer.repaints, repaintsBeforeMotion, 'moving cursor uses GPU transforms without Cairo repaint');
