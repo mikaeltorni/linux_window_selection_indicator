@@ -21,8 +21,8 @@ resolutions, and window moves/resizes are included automatically; empty gaps in
 staggered monitor layouts do not count. The line never intercepts clicks.
 
 The pointer uses the original direct tracking behavior without motion prediction
-or smoothing. Polling targets 144 samples per second (about 6.94ms)
-with monotonic deadlines and 6/7ms timer delays, preventing cumulative rounding
+or smoothing. Polling targets 288 samples per second (about 3.47ms)
+with monotonic deadlines and 3/4ms timer delays, preventing cumulative rounding
 drift. A delayed callback resumes normally instead of issuing a catch-up burst.
 Polling runs at normal priority so it yields to input processing. A cursor move
 queues a normal compositor redraw; while that frame is pending, redundant polls
@@ -43,7 +43,7 @@ cached until it changes. Stationary input does not force redraws; disabling
 `ptr` removes both tracking callbacks.
 
 Visible updates still depend on compositor/display timing: a 120Hz monitor
-cannot display 144 frames per second just because the tracker targets 144Hz.
+cannot display 288 frames per second just because the tracker targets 288Hz.
 The installer preserves display settings. The hardware cursor can still update
 between compositor presentations, so zero separation at every instant is not
 promised. The paint-time sampling follows GNOME's

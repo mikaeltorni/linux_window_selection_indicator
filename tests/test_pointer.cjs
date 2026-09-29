@@ -142,18 +142,18 @@ assert.equal(extension._pointer.reactive, false, 'line does not intercept mouse'
 assert.equal(extension._pointer.visible, true);
 assert.equal(typeof timer, 'function');
 assert.equal(typeof beforePaint, 'function');
-assert.equal(pollInterval, 7, 'first 144Hz sample uses the next whole millisecond');
+assert.equal(pollInterval, 4, 'first 288Hz sample uses the next whole millisecond');
 assert.equal(pollPriority, 0, 'polling yields to input processing rather than running at high priority');
 const timingStart = sampleTime;
-for (let count = 0; count < 144; count++) {
+for (let count = 0; count < 288; count++) {
     assert.equal(timer(), false, 'one-shot source is removed after scheduling its successor');
 }
 assert.ok(Math.abs(sampleTime - timingStart - 1000000) <= 1000,
-    '144 samples per second without cumulative 7ms rounding drift');
-assert.ok(scheduledDelays.includes(6) && scheduledDelays.includes(7), 'deadline schedule alternates 6/7ms delays');
+    '288 samples per second without cumulative 4ms rounding drift');
+assert.ok(scheduledDelays.includes(3) && scheduledDelays.includes(4), 'deadline schedule alternates 3/4ms delays');
 sampleTime += 1000000;
 timer();
-assert.ok(pollInterval >= 6 && pollInterval <= 7, 'stalls resume without a catch-up burst');
+assert.ok(pollInterval >= 3 && pollInterval <= 4, 'stalls resume without a catch-up burst');
 pointer = [700, 200]; beforePaint();
 assert.equal(extension._vector.x, 700, 'sample the latest cursor immediately before rendering');
 assert.equal(extension._pointer.translation_x + extension._pointerContent.radius, 700,
