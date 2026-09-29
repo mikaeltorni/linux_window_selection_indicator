@@ -10,7 +10,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const BORDER_PX = 4;
 const BORDER_COLOR = 'rgba(0, 255, 230, 0.6)';
-const POINTER_SAMPLE_HZ = 144;
+const POINTER_SAMPLE_HZ = 288;
 const POINTER_SAMPLE_US = 1000000 / POINTER_SAMPLE_HZ;
 
 /** Return true for a visible application window eligible for the indicator. */
@@ -150,8 +150,8 @@ export default class WindowSelectionIndicator extends Extension {
         wsiLog('info', `cursor vector ${this._pointerEnabled ? 'enabled' : 'disabled'}, max ${this._pointerMaxLength}px, ${POINTER_SAMPLE_HZ}Hz direct tracking with late paint-time sampling`);
     }
 
-    /** Schedule the next 144Hz probe without accumulating millisecond drift.
-     * GLib timers use whole milliseconds, so deadlines alternate 6/7ms waits.
+    /** Schedule the next 288Hz probe without accumulating millisecond drift.
+     * GLib timers use whole milliseconds, so deadlines alternate 3/4ms waits.
      * Missed deadlines resume normally instead of flooding the Shell with work.
      */
     _queuePointerSample() {
