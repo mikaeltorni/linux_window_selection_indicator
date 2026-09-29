@@ -9,6 +9,8 @@ const settings = { get_boolean: () => pointerEnabled, get_int: () => pointerMaxL
 let pointer = [20, 50], activeWorkspace = {}, timer, beforePaint, pollInterval, pollPriority, frameReads = 0;
 let sampleTime = 1000000;
 const scheduledDelays = [];
+let pointerQueries = 0, immediateFrames = 0;
+const view = { schedule_update_now() { immediateFrames++; } };
 const actors = [];
 class Actor {
     constructor(props) { Object.assign(this, props); actors.push(this); }
@@ -34,7 +36,8 @@ const shell = {
     display: { ...signals, focus_window: window },
     workspace_manager: { ...signals, get_active_workspace: () => activeWorkspace },
     window_group: { add_child() {}, set_child_above_sibling() {} },
-    get_pointer: () => pointer,
+    stage: { peek_stage_views: () => [view] },
+    get_pointer: () => { pointerQueries++; return pointer; },
 };
 const main = { overview: { ...signals, visible: false }, uiGroup: { add_child() {} },
     layoutManager: { ...signals, monitors: [{ x: 100, y: 100, width: 1001, height: 201 }] } };
@@ -118,7 +121,7 @@ assert.equal(extension._pointer.visible, true);
 assert.equal(typeof timer, 'function');
 assert.equal(typeof beforePaint, 'function');
 assert.equal(pollInterval, 7, 'first 144Hz sample uses the next whole millisecond');
-assert.equal(pollPriority, -100, 'sample ahead of ordinary GLib tasks');
+assert.equal(pollPriority, 0, 'polling yields to input processing rather than running at high priority');
 const timingStart = sampleTime;
 for (let count = 0; count < 144; count++) {
     assert.equal(timer(), false, 'one-shot source is removed after scheduling its successor');
@@ -137,19 +140,32 @@ assert.equal(extension._pointer.scale_x, 0.5);
 const readsBeforeMotion = frameReads, normalizationsBeforeMotion = normalizationCalls;
 const positionsBeforeMotion = extension._pointer.positions;
 const repaintsBeforeMotion = extension._pointer.repaints, resizesBeforeMotion = extension._pointer.resizes;
+const framesBeforeMotion = immediateFrames;
+pointer = [699, 200]; timer();
+assert.equal(immediateFrames, framesBeforeMotion + 1, 'motion advances the compositor frame deadline');
+const queriesWhilePending = pointerQueries;
+pointer = [698, 200]; timer(); timer();
+assert.equal(pointerQueries, queriesWhilePending, 'pending motion frame coalesces redundant X11 probes');
+assert.equal(immediateFrames, framesBeforeMotion + 1, 'one immediate frame request per pending frame');
+beforePaint();
+assert.equal(extension._vector.x, 698, 'pending frame samples newest input before it renders');
+assert.equal(immediateFrames, framesBeforeMotion + 1, 'paint callback does not schedule another frame');
 for (let x = 699; x >= 650; x--) { pointer = [x, 200]; timer(); beforePaint(); }
 assert.equal(extension._vector.x, 650, 'moving vector uses actual cursor coordinates');
 pointer = [660, 200]; timer(); beforePaint();
 assert.equal(extension._vector.x, 660, 'direction reversal follows actual coordinates immediately');
 for (let count = 0; count < 1000; count++) timer();
+const framesAfterPause = immediateFrames;
+timer(); beforePaint();
+assert.equal(immediateFrames, framesAfterPause, 'stationary cursor does not force compositor frames');
 assert.equal(frameReads, readsBeforeMotion, 'cursor tracking reuses window geometry');
 assert.equal(normalizationCalls, normalizationsBeforeMotion, 'cursor tracking reuses monitor normalization');
 assert.equal(extension._pointer.repaints, repaintsBeforeMotion, 'moving cursor uses GPU transforms without Cairo repaint');
 assert.equal(extension._pointer.resizes, resizesBeforeMotion, 'moving cursor does not reallocate its drawing surface');
 assert.equal(extension._pointer.positions, positionsBeforeMotion, 'moving cursor does not relayout the actor');
-pointer = [150, 150]; timer();
+pointer = [150, 150]; timer(); beforePaint();
 assert.equal(extension._pointer.visible, false, 'inside the window');
-pointer = [400, 200]; timer();
+pointer = [400, 200]; timer(); beforePaint();
 assert.equal(extension._pointer.visible, true);
 window.located_on_workspace = () => false; window['workspace-changed'](); timer();
 assert.equal(extension._pointer.visible, false, 'other workspace');
@@ -163,6 +179,7 @@ window.minimized = false; window['notify::minimized']();
 shell.display.focus_window = null; extension._syncFocus(); timer();
 assert.equal(extension._pointer.visible, false, 'no selected window');
 pointerEnabled = false; settingsCallback();
+assert.equal(extension._pointerFramePending, false, 'disable clears any pending-motion latch');
 assert.equal(timer, null, 'no polling when optional pointer is disabled');
 assert.equal(beforePaint, null, 'no pre-paint callback while disabled');
 assert.equal(extension._pointer.visible, false);
@@ -176,6 +193,12 @@ pointerMaxLength = 95; settingsCallback();
 assert.equal(extension._vector.length, 11.875, 'length changes live with desktop distance');
 assert.deepEqual(extension._pointer.pivot, [2 / 99, 0.5], 'length changes preserve the cursor pivot');
 assert.equal(extension._pointer.height, 4, 'drawing surface stays four pixels high');
+const originalViews = shell.stage.peek_stage_views;
+shell.stage.peek_stage_views = () => [];
+beforePaint(); pointer = [401, 200]; timer();
+assert.equal(extension._pointerFramePending, false, 'missing stage views do not freeze polling');
+shell.stage.peek_stage_views = originalViews;
+pointer = [400, 200]; timer(); beforePaint();
 main.layoutManager.monitors = [{ x: 100, y: 100, width: 2001, height: 201 }];
 main.layoutManager['monitors-changed'](); timer();
 assert.ok(Math.abs(extension._vector.length - 95 * 100 / 1800) < 1e-8,
