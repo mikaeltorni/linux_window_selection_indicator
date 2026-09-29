@@ -44,6 +44,7 @@ export default class WindowSelectionIndicator extends Extension {
         Main.uiGroup.add_child(this._pointer);
         this._pointerTimer = 0;
         this._pointerBeforePaint = 0;
+        this._pointerFramePending = false;
         this._settings = this.getSettings();
         this._settingsSignal = this._settings.connect('changed', () => this._syncPointerSettings());
         this._syncPointerSettings();
@@ -62,6 +63,7 @@ export default class WindowSelectionIndicator extends Extension {
     }
 
     _hide() {
+        this._pointerFramePending = false;
         this._pointerFrame = null;
         this._pointerLastX = NaN;
         this._outline.hide();
@@ -110,6 +112,7 @@ export default class WindowSelectionIndicator extends Extension {
         this._pointerFrame = frame;
         this._pointerMaxDistance = maximumPointerDistance(frame, Main.layoutManager.monitors);
         this._pointerLastX = NaN;
+        this._pointerFramePending = false;
         this._updatePointer();
     }
 
@@ -131,14 +134,15 @@ export default class WindowSelectionIndicator extends Extension {
             // older than the cursor by the time a scheduled frame is presented.
             this._pointerBeforePaint = Clutter.threads_add_repaint_func_full(
                 Clutter.RepaintFlags.PRE_PAINT, () => {
-                    this._updatePointer();
+                    this._pointerFramePending = false;
+                    this._updatePointer(false);
                     return GLib.SOURCE_CONTINUE;
                 });
             this._pointerNextSample = GLib.get_monotonic_time() + POINTER_SAMPLE_US;
             this._queuePointerSample();
         }
         this._updatePointer();
-        wsiLog('info', `cursor vector ${this._pointerEnabled ? 'enabled' : 'disabled'}, max ${this._pointerMaxLength}px, ${POINTER_SAMPLE_HZ}Hz direct samples with pre-paint refresh`);
+        wsiLog('info', `cursor vector ${this._pointerEnabled ? 'enabled' : 'disabled'}, max ${this._pointerMaxLength}px, ${POINTER_SAMPLE_HZ}Hz direct tracking with coalesced immediate frames`);
     }
 
     /** Schedule the next 144Hz probe without accumulating millisecond drift.
@@ -150,7 +154,7 @@ export default class WindowSelectionIndicator extends Extension {
             return;
         const delay = Math.max(1, Math.ceil(
             (this._pointerNextSample - GLib.get_monotonic_time()) / 1000));
-        this._pointerTimer = GLib.timeout_add(GLib.PRIORITY_HIGH, delay, () => {
+        this._pointerTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, delay, () => {
             this._pointerTimer = 0;
             this._updatePointer();
             this._pointerNextSample += POINTER_SAMPLE_US;
@@ -164,6 +168,7 @@ export default class WindowSelectionIndicator extends Extension {
 
     /** Release both callbacks so disabling the optional vector leaves no work. */
     _stopPointerTracking() {
+        this._pointerFramePending = false;
         if (this._pointerBeforePaint) {
             Clutter.threads_remove_repaint_func(this._pointerBeforePaint);
             this._pointerBeforePaint = 0;
@@ -174,12 +179,16 @@ export default class WindowSelectionIndicator extends Extension {
         }
     }
 
-    /** Sample at high priority and pre-paint; reuse all stationary geometry. */
-    _updatePointer() {
+    /** Coalesce polls while a frame is pending; always sample again at paint. */
+    _updatePointer(requestFrame = true) {
         if (!this._pointerEnabled || !this._pointerFrame) {
             this._pointer.hide();
             return;
         }
+        // X11's get_pointer() blocks on a server round trip. More probes while
+        // waiting for a frame cannot display anything and compete with input.
+        if (requestFrame && this._pointerFramePending)
+            return;
         const [x, y] = global.get_pointer();
         if (x === this._pointerLastX && y === this._pointerLastY)
             return;
@@ -189,7 +198,10 @@ export default class WindowSelectionIndicator extends Extension {
             this._pointerMaxDistance);
         this._vector = vector;
         if (vector.length === 0) {
+            const wasVisible = this._pointer.visible;
             this._pointer.hide();
+            if (requestFrame && wasVisible)
+                this._requestPointerFrame();
             return;
         }
         // Pivot is the texture's line start, so rotation and scaling keep the
@@ -198,6 +210,19 @@ export default class WindowSelectionIndicator extends Extension {
         this._pointer.rotation_angle_z = Math.atan2(vector.dy, vector.dx) * 180 / Math.PI;
         this._pointer.set_scale(vector.length / this._pointerMaxLength, 1);
         this._pointer.show();
+        if (requestFrame)
+            this._requestPointerFrame();
+    }
+
+    /** Advance an existing redraw's deadline without scheduling from paint.
+     * Include every view to erase the old line when crossing monitor edges.
+     * Mutter coalesces requests and waits for pending presentation safely.
+     */
+    _requestPointerFrame() {
+        const views = global.stage.peek_stage_views();
+        this._pointerFramePending = views.length > 0;
+        for (const view of views)
+            view.schedule_update_now();
     }
 
     /** Paint a reusable two-pixel horizontal stroke; motion changes transforms. */
