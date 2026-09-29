@@ -142,7 +142,7 @@ export default class WindowSelectionIndicator extends Extension {
             this._queuePointerSample();
         }
         this._updatePointer();
-        wsiLog('info', `cursor vector ${this._pointerEnabled ? 'enabled' : 'disabled'}, max ${this._pointerMaxLength}px, ${POINTER_SAMPLE_HZ}Hz direct tracking with coalesced immediate frames`);
+        wsiLog('info', `cursor vector ${this._pointerEnabled ? 'enabled' : 'disabled'}, max ${this._pointerMaxLength}px, ${POINTER_SAMPLE_HZ}Hz direct tracking with coalesced presentation-aligned frames`);
     }
 
     /** Schedule the next 144Hz probe without accumulating millisecond drift.
@@ -214,15 +214,16 @@ export default class WindowSelectionIndicator extends Extension {
             this._requestPointerFrame();
     }
 
-    /** Advance an existing redraw's deadline without scheduling from paint.
-     * Include every view to erase the old line when crossing monitor edges.
-     * Mutter coalesces requests and waits for pending presentation safely.
+    /** Preserve Mutter's presentation deadline so the final sample stays fresh.
+     * Immediate scheduling renders early and lets the hardware cursor advance
+     * while the frame waits for vblank. Include all views when crossing screens.
+     * Never schedule from the pre-paint callback itself.
      */
     _requestPointerFrame() {
         const views = global.stage.peek_stage_views();
         this._pointerFramePending = views.length > 0;
         for (const view of views)
-            view.schedule_update_now();
+            view.schedule_update();
     }
 
     /** Paint a reusable two-pixel horizontal stroke; motion changes transforms. */

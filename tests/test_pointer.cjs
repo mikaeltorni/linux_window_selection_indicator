@@ -9,8 +9,8 @@ const settings = { get_boolean: () => pointerEnabled, get_int: () => pointerMaxL
 let pointer = [20, 50], activeWorkspace = {}, timer, beforePaint, pollInterval, pollPriority, frameReads = 0;
 let sampleTime = 1000000;
 const scheduledDelays = [];
-let pointerQueries = 0, immediateFrames = 0;
-const view = { schedule_update_now() { immediateFrames++; } };
+let pointerQueries = 0, scheduledFrames = 0;
+const view = { schedule_update() { scheduledFrames++; } };
 const actors = [];
 class Actor {
     constructor(props) { Object.assign(this, props); actors.push(this); }
@@ -123,6 +123,8 @@ const source = fs.readFileSync(path.join(root, 'window-selection-indicator@local
     .replace(/^import .*;$/gm, '')
     .replace('export default class', 'globalThis.Indicator = class');
 assert.doesNotMatch(source, /PointerMotion|leadUs/, 'restore direct tracking without prediction');
+assert.doesNotMatch(source, /schedule_update_now/,
+    'early rendering discards presentation deadlines and makes the cursor sample stale at vblank');
 vm.runInContext(source, context);
 let normalizationCalls = 0;
 const calculateMaximum = context.maximumPointerDistance;
@@ -154,24 +156,24 @@ assert.ok(Math.abs(extension._pointer.scale_x - Math.sqrt(0.5)) < 1e-8);
 const readsBeforeMotion = frameReads, normalizationsBeforeMotion = normalizationCalls;
 const positionsBeforeMotion = extension._pointer.positions;
 const repaintsBeforeMotion = extension._pointer.repaints, resizesBeforeMotion = extension._pointer.resizes;
-const framesBeforeMotion = immediateFrames;
+const framesBeforeMotion = scheduledFrames;
 pointer = [699, 200]; timer();
-assert.equal(immediateFrames, framesBeforeMotion + 1, 'motion advances the compositor frame deadline');
+assert.equal(scheduledFrames, framesBeforeMotion + 1, 'motion preserves the compositor presentation deadline');
 const queriesWhilePending = pointerQueries;
 pointer = [698, 200]; timer(); timer();
 assert.equal(pointerQueries, queriesWhilePending, 'pending motion frame coalesces redundant X11 probes');
-assert.equal(immediateFrames, framesBeforeMotion + 1, 'one immediate frame request per pending frame');
+assert.equal(scheduledFrames, framesBeforeMotion + 1, 'one presentation request per pending frame');
 beforePaint();
 assert.equal(extension._vector.x, 698, 'pending frame samples newest input before it renders');
-assert.equal(immediateFrames, framesBeforeMotion + 1, 'paint callback does not schedule another frame');
+assert.equal(scheduledFrames, framesBeforeMotion + 1, 'paint callback does not schedule another frame');
 for (let x = 699; x >= 650; x--) { pointer = [x, 200]; timer(); beforePaint(); }
 assert.equal(extension._vector.x, 650, 'moving vector uses actual cursor coordinates');
 pointer = [660, 200]; timer(); beforePaint();
 assert.equal(extension._vector.x, 660, 'direction reversal follows actual coordinates immediately');
 for (let count = 0; count < 1000; count++) timer();
-const framesAfterPause = immediateFrames;
+const framesAfterPause = scheduledFrames;
 timer(); beforePaint();
-assert.equal(immediateFrames, framesAfterPause, 'stationary cursor does not force compositor frames');
+assert.equal(scheduledFrames, framesAfterPause, 'stationary cursor does not force compositor frames');
 assert.equal(frameReads, readsBeforeMotion, 'cursor tracking reuses window geometry');
 assert.equal(normalizationCalls, normalizationsBeforeMotion, 'cursor tracking reuses monitor normalization');
 assert.equal(extension._pointer.repaints, repaintsBeforeMotion, 'moving cursor uses GPU transforms without Cairo repaint');

@@ -25,9 +25,10 @@ or smoothing. Polling targets 144 samples per second (about 6.94ms)
 with monotonic deadlines and 6/7ms timer delays, preventing cumulative rounding
 drift. A delayed callback resumes normally instead of issuing a catch-up burst.
 Polling runs at normal priority so it yields to input processing. A cursor move
-requests an immediate compositor update; while that frame is pending, redundant
-polls are skipped. Clutter's pre-paint callback samples the newest cursor position
-for that frame and never requests another frame itself. Stationary input does
+requests a compositor update at Mutter's normal presentation deadline; it does
+not force early rendering that leaves the sampled cursor position waiting for
+vblank. While that frame is pending, redundant polls are skipped. Clutter's
+pre-paint callback samples the newest cursor position for that frame and never requests another frame itself. Stationary input does
 not force redraws. This reduces synchronous X11 cursor queries and avoids
 building a backlog of motion updates. Visible updates still
 depend on compositor/display timing: a 120Hz monitor cannot display 144 frames
