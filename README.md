@@ -18,7 +18,11 @@ a strictly linear scale made the line disappear under the cursor well before it
 reached the window. The farthest reachable monitor pixel gives the full configured
 length, and the line reaches zero at the window edge. Monitor positions,
 resolutions, and window moves/resizes are included automatically; empty gaps in
-staggered monitor layouts do not count. The line never intercepts clicks.
+staggered monitor layouts do not count. Neither indicator intercepts clicks or
+drag targets. Both actors are explicitly excluded from Shell actor picking:
+GNOME drag and drop uses `Clutter.PickMode.ALL`, which also includes actors
+marked `reactive: false`. Without that exclusion, the cursor vector could hide
+taskbar favourites from drop detection and prevent reordering.
 
 The pointer uses the original direct tracking behavior without motion prediction
 or smoothing. Polling targets 1000 probes per second with 1ms timer delays
@@ -65,6 +69,11 @@ The installer copies the extension to the desktop user's `~/.local/share/gnome-s
 On X11, new extension code requires GNOME Shell's in-place Alt+F2 `r` reload;
 on Wayland, sign out and back in after installation. No extra Python packages
 or root access are required.
+
+If favourite dragging is blocked by an older loaded copy, `lwsi ptr off` disables
+the cursor vector immediately while keeping the window outline. Leave it off
+until the updated extension loads at the next login, then use `lwsi ptr on` to
+restore the vector.
 
 Set `LWSI_PTR=on` or `LWSI_PTR=off` when running the installer to explicitly
 persist pointer enablement, for example `LWSI_PTR=off bash install.sh --default`.
@@ -127,6 +136,8 @@ an isolated settings backend. They cover workspace/focus visibility, shrinking
 and length limits, live enablement, installer selection, configuration before
 the first install, invalid input, and the installed command and copy lists.
 They do not open windows or reload your desktop. Node is only needed for tests.
+The pointer suite also checks drag-target transparency before and after live
+pointer enablement; its cases are mapped in [drag target coverage](tests/drag_target_coverage.md).
 
 ## Disclaimer
 
