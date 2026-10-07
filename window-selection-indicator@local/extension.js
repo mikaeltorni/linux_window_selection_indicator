@@ -2,6 +2,7 @@
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
+import Shell from 'gi://Shell';
 import { maximumPointerDistance, pointerVector } from './geometry.js';
 import { wsiLog } from './logging.js';
 import { PointerContent } from './pointerContent.js';
@@ -26,6 +27,8 @@ export default class WindowSelectionIndicator extends Extension {
             visible: false,
             style: `border: ${BORDER_PX}px solid ${BORDER_COLOR}; border-radius: 7px;`,
         });
+        // DND uses PickMode.ALL, which also includes nonreactive actors.
+        Shell.util_set_hidden_from_pick(this._outline, true);
         // Keep the indicator in the compositor's window stack. Shell chrome
         // and always-on-top application popups must remain above it.
         global.window_group.add_child(this._outline);
@@ -42,6 +45,7 @@ export default class WindowSelectionIndicator extends Extension {
         this._pointer = new Clutter.Actor({
             reactive: false, visible: false, content: this._pointerContent,
         });
+        Shell.util_set_hidden_from_pick(this._pointer, true);
         this._pointer.set_position(0, 0);
         Main.uiGroup.add_child(this._pointer);
         this._pointerTimer = 0;

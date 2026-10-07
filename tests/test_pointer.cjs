@@ -44,6 +44,7 @@ const shell = {
 const main = { overview: { ...signals, visible: false }, uiGroup: { add_child() {} },
     layoutManager: { ...signals, monitors: [{ x: 100, y: 100, width: 1001, height: 201 }] } };
 const context = vm.createContext({
+    Shell: { util_set_hidden_from_pick(actor, hidden) { actor.hiddenFromPick = hidden; } },
     St: { Widget: Actor, DrawingArea: Actor }, Extension: class { getSettings() { return settings; } },
     Main: main, global: shell, wsiLog() {},
     PointerContent: class {
@@ -140,6 +141,22 @@ extension.enable();
 assert.ok(extension._pointer, 'pointer actor created');
 assert.equal(extension._pointer.reactive, false, 'line does not intercept mouse');
 assert.equal(extension._pointer.visible, true);
+// DND deliberately picks ALL actors, including reactive:false overlays.
+// Model that public observation over an independently positioned target.
+function pickThroughOverlay(overlay, x, y) {
+    const target = { x, y, width: 1, height: 1, reactive: true, visible: true };
+    const picked = [target, overlay].reverse().find(actor =>
+        actor.visible && !actor.hiddenFromPick &&
+        x >= actor.x + (actor.translation_x || 0) &&
+        y >= actor.y + (actor.translation_y || 0) &&
+        x < actor.x + (actor.translation_x || 0) + actor.width &&
+        y < actor.y + (actor.translation_y || 0) + actor.height);
+    return { target, picked };
+}
+let pick = pickThroughOverlay(extension._pointer, 20, 50);
+assert.equal(pick.picked, pick.target, 'drag picking reaches the taskbar through the vector');
+pick = pickThroughOverlay(extension._outline, 150, 150);
+assert.equal(pick.picked, pick.target, 'drag picking reaches the window through the outline');
 assert.equal(typeof timer, 'function');
 assert.equal(typeof beforePaint, 'function');
 assert.equal(pollInterval, 1, 'first 1000Hz sample waits one millisecond');
@@ -212,6 +229,8 @@ assert.equal(extension._outline.visible, true, 'outline remains enabled');
 assert.equal(extension._pointer.visible, false);
 pointerEnabled = true; settingsCallback();
 assert.equal(extension._pointer.visible, true, 'live opt-in');
+assert.equal(extension._pointer.hiddenFromPick, true, 'live opt-in preserves drag transparency');
+assert.equal(extension._outline.hiddenFromPick, true, 'outline remains transparent to drag picking');
 pointerMaxLength = 95; settingsCallback();
 assert.ok(Math.abs(extension._vector.length - 95 * Math.sqrt(100 / 800)) < 1e-8,
     'length changes live with desktop distance');
