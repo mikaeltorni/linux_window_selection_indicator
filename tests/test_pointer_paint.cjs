@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 let pointer = [500, 200], queries = 0, uploads = 0;
+const traces = [];
 class ObjectBase { constructor() { this._init(); } _init() {} }
 class Matrix { init_from_2d(...values) { this.values = values; return this; } }
 class Node {
@@ -17,6 +18,7 @@ class Image {
     get_texture() { return this; }
 }
 const context = vm.createContext({
+    print: value => traces.push(value),
     GObject: { Object: ObjectBase, registerClass: (_metadata, cls) => cls },
     Clutter: { Content: {}, Image, TransformNode: Node, TextureNode: Node,
         ScalingFilter: { LINEAR: 1 }, ActorBox: class { constructor(props) { Object.assign(this, props); } } },
@@ -41,7 +43,20 @@ assert.equal(node.children[0].value.values[5], radius, 'y stays aligned to the h
 assert.equal(node.children[0].value.values[0], -1, 'line points left toward the target');
 const rectangle = node.children[0].children[0].rectangles[0];
 assert.ok(Math.abs(rectangle.x2 - 100 * Math.sqrt(208 / 800)) < 1e-8, 'length also uses the paint-time position');
-assert.equal(rectangle.y2 - rectangle.y1, 4, 'transparent padding surrounds the two-pixel stroke');
+assert.deepEqual(Array.from(node.children[0].children[0].value.dimensions), [1, 6, 4],
+    'six texture rows reserve one transparent row around a four-pixel stroke');
+assert.deepEqual(Array.from(node.children[0].children[0].value.data), [
+    0, 0, 0, 0,
+    0, 255, 230, 153,
+    0, 255, 230, 153,
+    0, 255, 230, 153,
+    0, 255, 230, 153,
+    0, 0, 0, 0,
+], 'four teal rows retain 60% opacity and transparent outer padding');
+assert.equal(rectangle.y2 - rectangle.y1, 6, 'paint rectangle includes the wider stroke and transparent padding');
+assert.equal(rectangle.y1, -3, 'wider stroke stays centered on the cursor');
+assert.equal(rectangle.y2, 3);
+assert.equal(radius, 167, 'reserved region includes the wider texture half-width');
 assert.equal(uploads, 1, 'one texture upload for the entire content lifetime');
 for (const p of [[492, 200], [500, 208], [510, 215]]) { pointer = p; assert.equal(paint().children.length, 1); }
 assert.equal(uploads, 1, 'movement does not allocate or upload another texture');

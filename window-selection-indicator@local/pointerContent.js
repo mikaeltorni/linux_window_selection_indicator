@@ -1,6 +1,6 @@
 /** Paint the vector with the cursor's actual position after layout/preparation.
  * The actor reserves a bounded region around its pre-paint anchor. A single
- * four-pixel texture supplies the two-pixel stroke; paint nodes rotate it on
+ * six-pixel texture supplies the four-pixel stroke; paint nodes rotate it on
  * the GPU without changing the actor's allocation or its paint volume.
  */
 import Clutter from 'gi://Clutter';
@@ -10,12 +10,17 @@ import Graphene from 'gi://Graphene';
 import { pointerVector } from './geometry.js';
 
 const PAINT_MARGIN = 64;
-const STROKE_PADDING = 2;
+const STROKE_PADDING = 3;
 
 export const PointerContent = GObject.registerClass({
     Implements: [Clutter.Content],
 }, class PointerContent extends GObject.Object {
+    /** Create the fixed texture and reusable matrix for a four-pixel stroke.
+     * Parameters: none.
+     * Returns: undefined; initializes this content instance.
+     */
     _init() {
+        print('parameters=none');
         super._init();
         this.frame = null;
         this.maxLength = 100;
@@ -28,8 +33,11 @@ export const PointerContent = GObject.registerClass({
             0, 0, 0, 0,
             0, 255, 230, 153,
             0, 255, 230, 153,
+            0, 255, 230, 153,
+            0, 255, 230, 153,
             0, 0, 0, 0,
-        ]), Cogl.PixelFormat.RGBA_8888, 1, 4, 4);
+        ]), Cogl.PixelFormat.RGBA_8888, 1, 6, 4);
+        print(undefined);
     }
 
     /** Half the fixed allocation, including the allowed late cursor movement. */
