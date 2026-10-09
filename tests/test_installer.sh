@@ -80,11 +80,23 @@ command="$HOME/.local/bin/lwsi"
 [[ "$("$command")" == 'ptr off 95px' ]]
 "$command" ptr on >/dev/null
 [[ "$("$command" ptr status)" == 'ptr on 95px' ]]
-"$command" --help | rg -q 'lwsi ptr'
-for args in '95 px' nope 0 1001; do
+# Restore is idempotent and preserves the previous maximum length.
+"$command" ptr on >/dev/null
+[[ "$("$command" ptr status)" == 'ptr on 95px' ]]
+"$command" --help | rg 'lwsi ptr' >/dev/null
+for args in '95 px' nope 0 -1 1001; do
     if "$command" ptr "$args" >/dev/null 2>&1; then exit 1; fi
+    [[ "$("$command" ptr status)" == 'ptr on 95px' ]]
 done
 if "$command" ptr 95 extra >/dev/null 2>&1; then exit 1; fi
+[[ "$("$command" ptr status)" == 'ptr on 95px' ]]
+if "$command" unknown >/dev/null 2>&1; then exit 1; fi
+[[ "$("$command" ptr status)" == 'ptr on 95px' ]]
+"$command" ptr off >/dev/null
+[[ "$("$command" ptr status)" == 'ptr off 95px' ]]
+if "$command" ptr on extra >/dev/null 2>&1; then exit 1; fi
+[[ "$("$command" ptr status)" == 'ptr off 95px' ]]
+"$command" ptr on >/dev/null
 [[ "$("$command" ptr status)" == 'ptr on 95px' ]]
 for file in logging.sh pointer_settings.sh; do
     cmp "$root/lib/$file" "$HOME/.local/lib/linux-window-selection-indicator/$file"
