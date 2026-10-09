@@ -6,7 +6,7 @@ workspace changes on every normal window, including terminals, browsers, and
 editors.
 The extension does not inspect agent processes, statuses, or terminal classes.
 
-The optional `ptr` component draws a thin teal line from the cursor hotspot
+The optional `ptr` component draws a 4px teal line from the cursor hotspot
 toward the nearest edge of the focused window, only on the active workspace. It disappears
 when the cursor enters the window, focus is absent, or the overview is open.
 The line shortens smoothly as the cursor approaches the nearest window edge.
@@ -41,8 +41,8 @@ The region includes a 64px margin for input arriving during frame preparation.
 A sudden warp beyond that margin omits the stroke for the current frame; the
 next tracking tick moves the region and redraws it safely. The line is never
 painted outside the area the compositor has reserved for this frame. A single
-1×4 texture supplies the two-pixel stroke, and GPU paint nodes place and rotate
-it without Cairo repainting or per-motion allocation changes. The region resizes
+1×6 texture supplies the four-pixel stroke, with one transparent row on each
+side. GPU paint nodes place and rotate it without Cairo repainting or per-motion allocation changes. The region resizes
 only when the configured maximum length changes. Window/monitor geometry stays
 cached until it changes. Stationary input does not force redraws; disabling
 `ptr` removes both tracking callbacks.
@@ -70,10 +70,17 @@ On X11, new extension code requires GNOME Shell's in-place Alt+F2 `r` reload;
 on Wayland, sign out and back in after installation. No extra Python packages
 or root access are required.
 
+If the cursor vector disappears while the outline is still visible, check
+`lwsi ptr status`. A saved `off` setting persists across logins and ordinary
+outline reinstalls; use `lwsi ptr on` to restore it at its saved maximum length.
+The pointer intentionally hides when the cursor is inside the focused window,
+when no eligible window is focused, and while the overview is open.
+
 If favourite dragging is blocked by an older loaded copy, `lwsi ptr off` disables
-the cursor vector immediately while keeping the window outline. Leave it off
-until the updated extension loads at the next login, then use `lwsi ptr on` to
-restore the vector.
+the vector immediately while keeping the outline. Install the corrected code
+and activate it with the X11 reload or the next Wayland login described above,
+then use `lwsi ptr on`. The current code excludes both indicators from drag-target
+picking, so the restored vector allows taskbar favourites to be reordered.
 
 Set `LWSI_PTR=on` or `LWSI_PTR=off` when running the installer to explicitly
 persist pointer enablement, for example `LWSI_PTR=off bash install.sh --default`.
@@ -129,6 +136,7 @@ node tests/test_pointer.cjs
 node tests/test_pointer_paint.cjs
 bash tests/test_installer.sh
 bash tests/test_extension_contract.sh
+bash tests/test_installation_configs.sh
 ```
 
 The pointer tests use a mocked Shell; installer tests use a temporary home and
@@ -138,6 +146,8 @@ the first install, invalid input, and the installed command and copy lists.
 They do not open windows or reload your desktop. Node is only needed for tests.
 The pointer suite also checks drag-target transparency before and after live
 pointer enablement; its cases are mapped in [drag target coverage](tests/drag_target_coverage.md).
+The restoration and four-pixel paint cases are mapped in
+[pointer restoration coverage](tests/restoration_coverage.md).
 
 ## Disclaimer
 
