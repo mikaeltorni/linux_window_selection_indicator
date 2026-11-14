@@ -1,7 +1,5 @@
 # Pointer restoration coverage
 
-Authoritative queue and checkpoints: `/home/mk/projects/installation_scripts/tmp/workflow/68758d42fec543c68a29582948603087.md`.
-
 The disappearance was a persisted off setting after the prior drag repair, not a broken enable operation. The saved public regression uses the installed CLI in a fresh isolated home. A passing pre-repair run protects the existing restoration path; the actual desktop baseline was `ptr off 100px`.
 
 | Operation | Rejection class | Rejected public input | Validation owner | Expected rejection | Test and immediate public observations |
