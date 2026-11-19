@@ -65,8 +65,21 @@ wsi_disable_pointer() {
     wsi_set_pointer_enabled off
 }
 
-# Side-effect-free probes for the master's detection contract.
-wsi_detect_outline() { [[ -f "$WSI_TARGET_DIR/extension.js" ]]; }
+# Report whether the deployed outline is enabled in GNOME.
+# Parameters: none. Returns: zero when installed and enabled, one otherwise.
+wsi_detect_outline() {
+    printf 'parameters=none\n' >&2
+    local enabled status=1
+    if [[ -f "$WSI_TARGET_DIR/extension.js" ]] &&
+        enabled="$(run_as_target gsettings get org.gnome.shell enabled-extensions)" &&
+        [[ "$enabled" == *"'window-selection-indicator@local'"* ]]; then
+        status=0
+    fi
+    printf '%s\n' "$status" >&2
+    return "$status"
+}
+
+# Side-effect-free probe for the optional saved pointer setting.
 wsi_detect_pointer() {
     [[ -f "$WSI_TARGET_DIR/schemas/gschemas.compiled" ]] || return 1
     [[ "$(run_as_target env GSETTINGS_SCHEMA_DIR="$WSI_TARGET_DIR/schemas" gsettings get "$WSI_SCHEMA" pointer-enabled)" == true ]]
