@@ -101,3 +101,22 @@ if "$command" ptr on extra >/dev/null 2>&1; then exit 1; fi
 for file in logging.sh pointer_settings.sh; do
     cmp "$root/lib/$file" "$HOME/.local/lib/linux-window-selection-indicator/$file"
 done
+
+# Removal disables the outline while retaining its files and pointer preference.
+cat > "$sandbox/bin/gnome-extensions" <<'SH'
+#!/usr/bin/env bash
+set -eu
+[[ "$*" == 'disable window-selection-indicator@local' ]]
+gsettings set org.gnome.shell enabled-extensions "['fixture-other@example']"
+SH
+chmod +x "$sandbox/bin/gnome-extensions"
+gsettings set org.gnome.shell enabled-extensions "['fixture-other@example', 'window-selection-indicator@local']"
+[[ "$(bash "$root/install.sh" --detect)" == *$'outline\tinstalled'* ]]
+bash "$root/install.sh" --uninstall outline >/dev/null
+[[ -f "$HOME/.local/share/gnome-shell/extensions/window-selection-indicator@local/extension.js" ]]
+[[ "$(gsettings get org.gnome.shell enabled-extensions)" == "['fixture-other@example']" ]]
+detected="$(bash "$root/install.sh" --detect)"
+[[ "$detected" == *$'outline\tabsent'* ]] || { printf 'Disabled outline status: %s\n' "$detected" >&2; exit 1; }
+[[ "$("$command" ptr status)" == 'ptr on 95px' ]]
+bash "$root/install.sh" --reconfigure outline >/dev/null
+[[ "$(bash "$root/install.sh" --detect)" == *$'outline\tinstalled'* ]]
