@@ -1,4 +1,27 @@
-# Linux Window Selection Indicator
+# Linux Window Selection Indicator — GNOME focused-window outline
+
+Linux Window Selection Indicator is a GNOME focused-window outline extension for users who
+want a visible border that follows the active application window.
+
+[![Last commit](https://img.shields.io/github/last-commit/mikaeltorni/linux_window_selection_indicator)](https://github.com/mikaeltorni/linux_window_selection_indicator/commits/master)
+[![Commit activity](https://img.shields.io/github/commit-activity/m/mikaeltorni/linux_window_selection_indicator)](https://github.com/mikaeltorni/linux_window_selection_indicator/graphs/commit-activity)
+[![Issues](https://img.shields.io/github/issues/mikaeltorni/linux_window_selection_indicator)](https://github.com/mikaeltorni/linux_window_selection_indicator/issues)
+
+[Installation](#install) · [Pointer settings](#live-pointer-controls) · [Verification](#verification) · [Installer commands](#installer-lifecycle) · [MIT license](LICENSE.md)
+
+[Linux Hotkey Window Tools](https://github.com/mikaeltorni/linux_hotkey_window_tools) provides pointer-driven movement and resizing alongside the visual focus indicator.
+
+## Quick start
+
+Run as the desktop user in GNOME. The installer enables the focused-window outline.
+
+```bash
+bash install.sh --list-components
+bash install.sh --select outline
+bash install.sh --detect
+```
+
+The Ubuntu 24.04.5 GNOME 46 X11 workstation VM detected the outline and confirmed its extension was active.
 
 A small GNOME Shell extension that draws a 4px teal outline at 60% opacity
 around the focused application window. It follows focus, moves, resizes, and
@@ -158,6 +181,28 @@ You are solely responsible for determining whether this software is suitable, sa
 The authors and copyright holders make no guarantees regarding security, reliability, availability, correctness, compliance, non-infringement, or fitness for any particular purpose.
 
 This notice is intended to clarify the nature of the project and does not impose additional restrictions beyond the MIT License.
+
+## GNOME focused-window outline FAQ
+
+### What does the outline follow?
+
+The outline follows the focused application window as focus, window geometry, or workspace changes. It applies to normal windows such as terminals, browsers, and editors.
+
+### How do I install only the focus outline?
+
+Run `bash install.sh --select outline` from the checkout as the GNOME desktop user. Check the result with `bash install.sh --detect`.
+
+### How do I enable the cursor-to-window line?
+
+Select the optional `ptr` component in addition to `outline`. The installer lists `outline` as its prerequisite.
+
+### When does the line disappear?
+
+It disappears when the pointer is inside the focused window, there is no focused window, or the overview is open. The line length changes as the pointer approaches the nearest edge.
+
+### Where do I change the pointer visualization?
+
+See the live pointer controls for the available settings. Adjust the values in your desktop session and use the verification commands to confirm the selected components.
 
 ## Installer lifecycle
 
